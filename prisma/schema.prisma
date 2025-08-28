@@ -1,16 +1,29 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  extensions = [pg_trgm, pgcrypto]
+}
+
+// Enums
+enum DocumentType {
+  ID
+  RECEIPT
+  CONTRACT
+  STATEMENT
+  OTHER
 }
 
 enum JobType {
   OCR
-  TRANSLATION
-  SUMMARIZATION
+  PARSING
+  VALIDATION
+  EXPORT
 }
 
 enum JobStatus {
@@ -18,24 +31,166 @@ enum JobStatus {
   PROCESSING
   COMPLETED
   FAILED
+  CANCELLED
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+}
+
+// Models
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  role          String    @default("USER")
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  auditLogs     AuditLog[]
+}
+
+model Member {
+  id              String      @id @default(cuid())
+  dni             String      @unique
+  firstName       String
+  lastName        String
+  email           String?     @unique
+  phone          String?
+  address        String?
+  status         MemberStatus @default(PENDING_VERIFICATION)
+  joinedAt       DateTime    @default(now())
+  birthDate      DateTime?
+  nationality    String?
+  documents      Document[]
+  dues           MemberDue[]
+  links          Link[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([dni])
+  @@index([status])
 }
 
 model Document {
-  id          String   @id @default(cuid())
-  title       String
-  content     String?
-  filePath    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  jobs        Job[]
+  id              String      @id @default(cuid())
+  type            DocumentType
+  originalName    String
+  storagePath     String
+  mimeType        String
+  size            Int
+  content         String?
+  metadata        Json?
+  memberId        String?
+  member          Member?     @relation(fields: [memberId], references: [id])
+  extractions     Extraction[]
+  jobs            Job[]
+  links           Link[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  processedAt     DateTime?
+
+  @@index([memberId])
+  @@index([type])
+}
+
+model Extraction {
+  id          String    @id @default(cuid())
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id])
+  fieldName   String
+  fieldValue  String?
+  confidence  Float?
+  source      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([documentId, fieldName])
+  @@index([documentId])
 }
 
 model Job {
-  id         String     @id @default(cuid())
-  type       JobType
-  status     JobStatus  @default(PENDING)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  documentId String
-  document   Document   @relation(fields: [documentId], references: [id])
+  id          String     @id @default(cuid())
+  type        JobType
+  status      JobStatus  @default(PENDING)
+  metadata    Json?
+  result      Json?
+  error       String?
+  documentId  String
+  document    Document   @relation(fields: [documentId], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([documentId])
+  @@index([status])
+  @@index([type])
+}
+
+model MemberDue {
+  id          String   @id @default(cuid())
+  memberId    String
+  member      Member   @relation(fields: [memberId], references: [id])
+  year        Int
+  month       Int
+  amount      Float
+  paid        Boolean  @default(false)
+  paidAt      DateTime?
+  reference   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([memberId, year, month])
+  @@index([memberId])
+  @@index([paid])
+}
+
+model Link {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id])
+  memberId    String?
+  member      Member?  @relation(fields: [memberId], references: [id])
+  type        String
+  confidence  Float?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([memberId])
+  @@index([type])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  entityType  String
+  entityId    String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
