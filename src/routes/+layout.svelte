@@ -25,9 +25,10 @@
         <div class="hidden md:block">
           <div class="ml-10 flex items-baseline space-x-4">
             <a href="/" class="bg-indigo-700 text-white px-3 py-2 rounded-md text-sm font-medium">Inicio</a>
-            <a href="/documents" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Documentos</a>
-            <a href="/members" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Socios</a>
-            <a href="/reports" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Reportes</a>
+            <a href="/instituciones" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Instituciones</a>
+            <a href="/socios" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Socios</a>
+            <a href="/documentos" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Documentos</a>
+            <a href="/reportes" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Reportes</a>
           </div>
         </div>
       </div>
@@ -72,8 +73,9 @@
   <div class="md:hidden {mobileMenuOpen ? 'block' : 'hidden'}" id="mobile-menu">
     <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
       <a href="/" class="bg-indigo-700 text-white block px-3 py-2 rounded-md text-base font-medium">Inicio</a>
-      <a href="/documents" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Documentos</a>
-      <a href="/members" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Socios</a>
+      <a href="/instituciones" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Instituciones</a>
+      <a href="/socios" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Socios</a>
+      <a href="/documentos" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Documentos</a>
       <a href="/reports" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Reportes</a>
     </div>
     <div class="pt-4 pb-3 border-t border-indigo-700">

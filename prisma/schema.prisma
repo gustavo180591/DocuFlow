@@ -1,149 +1,198 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
-  extensions = [pg_trgm, pgcrypto]
+  extensions        = [pg_trgm, pgcrypto]
 }
 
-// Enums
-enum DocumentType {
-  ID
-  RECEIPT
-  CONTRACT
-  STATEMENT
-  OTHER
-}
+model Institution {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  cuit      String     @unique
+  address   String?
+  phone     String?    @db.VarChar(20)
+  email     String?    @unique
+  website   String?    @db.VarChar(255)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
+  members   Member[]
 
-enum JobType {
-  OCR
-  PARSING
-  VALIDATION
-  EXPORT
-}
-
-enum JobStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum MemberStatus {
-  ACTIVE
-  INACTIVE
-  PENDING_VERIFICATION
-  SUSPENDED
-}
-
-// Models
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String
-  passwordHash  String
-  role          String    @default("USER")
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  auditLogs     AuditLog[]
+  @@index([cuit])
+  @@index([isActive])
+  @@map("institutions")
 }
 
 model Member {
-  id              String      @id @default(cuid())
-  dni             String      @unique
-  firstName       String
-  lastName        String
-  email           String?     @unique
+  id             String       @id @default(cuid())
+  dni            String       @unique
+  nombre         String
+  apellido       String
+  email          String?      @unique
   phone          String?
-  address        String?
-  status         MemberStatus @default(PENDING_VERIFICATION)
-  joinedAt       DateTime    @default(now())
+  address        String?      @db.Text
   birthDate      DateTime?
   nationality    String?
+  status         MemberStatus @default(ACTIVE)
+  joinedAt       DateTime     @default(now())
+  institution    Institution  @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  institutionId  String
   documents      Document[]
-  dues           MemberDue[]
+  memberDues     MemberDue[]
   links          Link[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([dni])
+  @@index([apellido, nombre])
+  @@index([institutionId])
+  @@index([createdAt])
+  @@index([email])
   @@index([status])
+  @@map("members")
+}
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String?    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          String     @default("USER")
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  auditLogs     AuditLog[]
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 model Document {
-  id              String      @id @default(cuid())
-  type            DocumentType
-  originalName    String
-  storagePath     String
-  mimeType        String
-  size            Int
-  content         String?
-  metadata        Json?
-  memberId        String?
-  member          Member?     @relation(fields: [memberId], references: [id])
-  extractions     Extraction[]
-  jobs            Job[]
-  links           Link[]
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  processedAt     DateTime?
+  id            String        @id @default(cuid())
+  type          DocumentType?
+  originalName  String        @db.VarChar(255)
+  storagePath   String        @db.VarChar(512)
+  mimeType      String        @db.VarChar(100)
+  size          Int
+  content       String?
+  metadata      Json?
+  memberId      String?
+  institutionId String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  processedAt   DateTime?
+  pages         Int?
+  sha256        String        @unique
+  institution   Institution?  @relation(fields: [institutionId], references: [id])
+  member        Member?       @relation(fields: [memberId], references: [id])
+  extractions   Extraction[]
+  jobs          Job[]
+  links         Link[]
 
+  @@index([institutionId])
   @@index([memberId])
+  @@index([sha256])
+}
+
+model Job {
+  id           String     @id @default(cuid())
+  type         JobType
+  status       JobStatus  @default(QUEUED)
+  payload      Json
+  result       Json?
+  metrics      Json?      // Para guardar métricas/telemetría
+  priority     Int        @default(0)
+  attempts     Int        @default(0)
+  maxAttempts  Int        @default(3)
+  lastError    String?    @db.Text
+  scheduledAt  DateTime?
+  createdAt    DateTime   @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  lockedAt     DateTime?
+  documentId   String?
+  document     Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([status, priority, createdAt])
+  @@index([scheduledAt])
+  @@index([documentId])
   @@index([type])
 }
 
 model Extraction {
-  id          String    @id @default(cuid())
-  documentId  String
-  document    Document  @relation(fields: [documentId], references: [id])
-  fieldName   String
-  fieldValue  String?
-  confidence  Float?
-  source      String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String   @id @default(cuid())
+  documentId String
+  fieldName  String   @db.VarChar(100)
+  fieldValue String?
+  confidence Decimal? @db.Decimal(3, 2)
+  source     String   @db.VarChar(50)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, fieldName])
   @@index([documentId])
-}
-
-model Job {
-  id          String     @id @default(cuid())
-  type        JobType
-  status      JobStatus  @default(PENDING)
-  metadata    Json?
-  result      Json?
-  error       String?
-  documentId  String
-  document    Document   @relation(fields: [documentId], references: [id])
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  @@index([documentId])
-  @@index([status])
-  @@index([type])
+  @@index([fieldName])
 }
 
 model MemberDue {
-  id          String   @id @default(cuid())
-  memberId    String
-  member      Member   @relation(fields: [memberId], references: [id])
-  year        Int
-  month       Int
-  amount      Float
-  paid        Boolean  @default(false)
-  paidAt      DateTime?
-  reference   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String    @id @default(cuid())
+  memberId  String
+  year      Int
+  month     Int
+  amount    Float
+  paid      Boolean   @default(false)
+  paidAt    DateTime?
+  reference String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  member    Member    @relation(fields: [memberId], references: [id])
 
   @@unique([memberId, year, month])
   @@index([memberId])
@@ -151,16 +200,16 @@ model MemberDue {
 }
 
 model Link {
-  id          String   @id @default(cuid())
-  documentId  String
-  document    Document @relation(fields: [documentId], references: [id])
-  memberId    String?
-  member      Member?  @relation(fields: [memberId], references: [id])
-  type        String
-  confidence  Float?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  documentId String
+  memberId   String?
+  type       String
+  confidence Float?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  document   Document @relation(fields: [documentId], references: [id])
+  member     Member?  @relation(fields: [memberId], references: [id])
 
   @@index([documentId])
   @@index([memberId])
@@ -168,16 +217,16 @@ model Link {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  action      String
-  entityType  String
-  entityId    String?
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  metadata    Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String?
+  userId     String
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
 
   @@index([action])
   @@index([entityType, entityId])
@@ -193,4 +242,30 @@ model SystemConfig {
   isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+enum JobType {
+  OCR
+  PARSING
+  VALIDATION
+  EXPORT
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  ERROR
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum DocumentType {
+  BANK_RECEIPT
+  CONCEPT_SUMMARY
+  MEMBER_CARD
 }

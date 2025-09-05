@@ -5,7 +5,36 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seeding...');
 
-  // Create sample members
+  // Create sample institutions
+  const institution1 = await prisma.institution.upsert({
+    where: { cuit: '30-12345678-9' },
+    update: {},
+    create: {
+      name: 'Asociación Civil Ejemplo',
+      cuit: '30-12345678-9',
+      address: 'Av. Corrientes 1234, CABA',
+      phone: '+54 11 4123-4567',
+      email: 'contacto@acejemplo.org.ar',
+      website: 'https://www.acejemplo.org.ar',
+      isActive: true
+    }
+  });
+
+  const institution2 = await prisma.institution.upsert({
+    where: { cuit: '30-87654321-0' },
+    update: {},
+    create: {
+      name: 'Fundación Solidaridad',
+      cuit: '30-87654321-0',
+      address: 'Av. Santa Fe 4567, CABA',
+      phone: '+54 11 4987-6543',
+      email: 'info@fundacionsolidaridad.org.ar',
+      website: 'https://www.fundacionsolidaridad.org.ar',
+      isActive: true
+    }
+  });
+
+  // Create sample members for institution 1
   const member1 = await prisma.member.upsert({
     where: { dni: '12345678' },
     update: {},
@@ -16,9 +45,11 @@ async function main() {
       email: 'juan.perez@email.com',
       phone: '+54 11 1234-5678',
       address: 'Av. Corrientes 1234, CABA',
-      status: 'ACTIVE',
       birthDate: new Date('1990-05-15'),
-      nationality: 'Argentina'
+      nationality: 'Argentina',
+      status: 'ACTIVE',
+      joinedAt: new Date('2020-01-15'),
+      institutionId: institution1.id
     }
   });
 
@@ -32,12 +63,15 @@ async function main() {
       email: 'maria.gonzalez@email.com',
       phone: '+54 11 2345-6789',
       address: 'Belgrano 567, CABA',
-      status: 'ACTIVE',
       birthDate: new Date('1985-08-22'),
-      nationality: 'Argentina'
+      nationality: 'Argentina',
+      status: 'ACTIVE',
+      joinedAt: new Date('2019-06-10'),
+      institutionId: institution1.id
     }
   });
 
+  // Create sample members for institution 2
   const member3 = await prisma.member.upsert({
     where: { dni: '34567890' },
     update: {},
@@ -48,9 +82,11 @@ async function main() {
       email: 'carlos.lopez@email.com',
       phone: '+54 11 3456-7890',
       address: 'San Martín 890, CABA',
-      status: 'PENDING_VERIFICATION',
-      birthDate: new Date('1992-03-10'),
-      nationality: 'Argentina'
+      birthDate: new Date('1982-11-30'),
+      nationality: 'Argentina',
+      status: 'ACTIVE',
+      joinedAt: new Date('2021-03-22'),
+      institutionId: institution2.id
     }
   });
 
@@ -63,14 +99,17 @@ async function main() {
       lastName: 'Martínez',
       email: 'ana.martinez@email.com',
       phone: '+54 11 4567-8901',
-      address: 'Rivadavia 123, CABA',
-      status: 'ACTIVE',
-      birthDate: new Date('1988-12-05'),
-      nationality: 'Argentina'
+      address: 'Av. Cabildo 1234, CABA',
+      status: 'INACTIVE',
+      birthDate: new Date('1992-03-10'),
+      nationality: 'Argentina',
+      joinedAt: new Date('2022-01-10'),
+      institutionId: institution2.id
     }
   });
 
-  const member5 = await prisma.member.upsert({
+  // Member 5 - Inactive member in institution 1
+  await prisma.member.upsert({
     where: { dni: '56789012' },
     update: {},
     create: {
@@ -82,7 +121,9 @@ async function main() {
       address: 'Florida 456, CABA',
       status: 'INACTIVE',
       birthDate: new Date('1975-06-20'),
-      nationality: 'Argentina'
+      nationality: 'Argentina',
+      joinedAt: new Date('2021-11-15'),
+      institutionId: institution1.id
     }
   });
 
