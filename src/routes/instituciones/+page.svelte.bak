@@ -1,15 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import type { PageData } from './$types';
-
-  // Page data from load function
-  export let data: PageData & {
-    institutions?: Institution[];
-    meta?: { total: number };
-  };
+  import { fade, fly } from 'svelte/transition';
+  import type { TransitionConfig } from 'svelte/transition';
+  import { writable } from 'svelte/store';
   
-  // Types
   interface Institution {
     id?: string;
     name: string;
@@ -19,26 +13,19 @@
     email: string;
     website: string;
     isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
   }
-  
-  type FormData = {
-    name: string;
-    cuit: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-    isActive: boolean;
-  };
-  
-  type FormErrors = Partial<Record<keyof FormData, string>>;
 
-  // State
-  let institutions: Institution[] = data.institutions || [];
-  let loading = !data.institutions;
-  let error: string | null = null;
-  let showModal = false;
-  let formData: FormData = {
+  interface FormErrors {
+    [key: string]: string;
+  }
+
+  const institutions = writable<Institution[]>([]);
+  const loading = writable<boolean>(true);
+  const error = writable<string | null>(null);
+  const showModal = writable<boolean>(false);
+  const formData = writable<Omit<Institution, 'id'>>({
     name: '',
     cuit: '',
     address: '',
@@ -46,63 +33,55 @@
     email: '',
     website: '',
     isActive: true
-  };
-  let formErrors: FormErrors = {};
-  let isSubmitting = false;
-  let searchTerm = '';
-  let currentPage = 1;
+  });
+  const formErrors = writable<FormErrors>({});
+  const isSubmitting = writable<boolean>(false);
+  const searchTerm = writable<string>('');
+  const currentPage = writable<number>(1);
   const itemsPerPage = 10;
-  let totalItems = data.meta?.total || 0;
-  
-  // Helper function to safely get error message
-  function getErrorMessage(err: unknown): string {
-    return typeof err === 'object' && err && 'message' in err 
-      ? String((err as any).message) 
-      : 'Error inesperado';
-  }
+  const totalItems = writable<number>(0);
 
-  async function fetchInstitutions() {
+  const fetchInstitutions = async () => {
     try {
-      loading = true;
-      error = null;
+      loading.set(true);
+      error.set(null);
       
       const params = new URLSearchParams({
-        search: searchTerm,
-        page: currentPage.toString(),
+        search: $searchTerm,
+        page: $currentPage.toString(),
         limit: itemsPerPage.toString()
       });
       
       const response = await fetch(`/api/institutions?${params}`);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al cargar las instituciones');
+        throw new Error('Error al cargar las instituciones');
       }
       
-      const result = await response.json();
-      institutions = result.data || [];
-      totalItems = result.meta?.total || 0;
+      const data: { data: Institution[]; meta: { total: number } } = await response.json();
+      institutions.set(data.data);
+      totalItems.set(data.meta.total);
     } catch (err) {
       console.error('Error:', err);
-      error = getErrorMessage(err);
+      error.set(err instanceof Error ? err.message : 'Ocurrió un error inesperado');
     } finally {
-      loading = false;
+      loading.set(false);
     }
   };
 
-  function handleSearch(e: Event) {
+  const handleSearch = (e: Event) => {
     e?.preventDefault();
-    currentPage = 1;
+    currentPage.set(1);
     fetchInstitutions();
-  }
+  };
 
-  function handlePageChange(page: number) {
-    currentPage = page;
+  const handlePageChange = (page: number) => {
+    currentPage.set(page);
     fetchInstitutions();
-  }
+  };
 
-  function openModal() {
-    formData = {
+  const openModal = () => {
+    formData.set({
       name: '',
       cuit: '',
       address: '',
@@ -110,68 +89,67 @@
       email: '',
       website: '',
       isActive: true
-    };
-    formErrors = {};
-    showModal = true;
-  }
+    });
+    formErrors.set({});
+    showModal.set(true);
+  };
 
-  function closeModal() {
-    showModal = false;
-  }
+  const closeModal = () => {
+    showModal.set(false);
+  };
 
-  function validateForm(): boolean {
+  const validateForm = (): boolean => {
     const errors: FormErrors = {};
-
-    if (!formData.name.trim()) {
+    const currentFormData = $formData;
+    
+    if (!currentFormData.name.trim()) {
       errors.name = 'El nombre es requerido';
     }
-
-    if (!formData.cuit.trim()) {
+    
+    if (!currentFormData.cuit.trim()) {
       errors.cuit = 'El CUIT es requerido';
-    } else if (!/^\d{2}-\d{8}-\d$/.test(formData.cuit)) {
+    } else if (!/^\d{2}-\d{8}-\d$/.test(currentFormData.cuit)) {
       errors.cuit = 'Formato de CUIT inválido (ej: 30-12345678-9)';
     }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    
+    if (currentFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentFormData.email)) {
       errors.email = 'Email inválido';
     }
-
-    formErrors = errors;
+    
+    formErrors.set(errors);
     return Object.keys(errors).length === 0;
-  }
+  };
 
-  async function handleSubmit() {
+  const handleSubmit = async (): Promise<void> => {
     if (!validateForm()) return;
-
+    
     try {
-      isSubmitting = true;
+      isSubmitting.set(true);
       const response = await fetch('/api/institutions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify($formData)
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Error al guardar la institución');
       }
-
+      
       closeModal();
       await fetchInstitutions();
     } catch (err) {
       console.error('Error:', err);
-      error = getErrorMessage(err);
+      error.set(err instanceof Error ? err.message : 'Ocurrió un error inesperado');
     } finally {
-      isSubmitting = false;
+      isSubmitting.set(false);
     }
   };
 
   onMount(() => {
-    if (!data.institutions) {
-      fetchInstitutions();
-    }
+    fetchInstitutions();
   });
 </script>
 
@@ -191,7 +169,7 @@
     <form on:submit|preventDefault={handleSearch} class="flex gap-2">
       <input
         type="text"
-        bind:value={searchTerm}
+        bind:value={$searchTerm}
         placeholder="Buscar instituciones..."
         class="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
@@ -204,17 +182,17 @@
     </form>
   </div>
 
-  {#if loading}
+  {#if $loading}
     <div class="text-center py-8">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
       <p class="mt-2 text-gray-600">Cargando instituciones...</p>
     </div>
-  {:else if error}
+  {:else if $error}
     <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
       <p class="font-bold">Error</p>
-      <p>{error}</p>
+      <p>{$error}</p>
     </div>
-  {:else if institutions.length === 0}
+  {:else if $institutions.length === 0}
     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
       <div class="flex">
         <div class="flex-shrink-0">
@@ -254,7 +232,7 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            {#each institutions as institution (institution.id)}
+            {#each $institutions as institution (institution.id)}
               <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
@@ -284,19 +262,19 @@
         </table>
       </div>
 
-      {#if totalItems > itemsPerPage}
+      {#if $totalItems > itemsPerPage}
         <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
           <div class="flex-1 flex justify-between sm:hidden">
             <button 
-              on:click={() => currentPage < Math.ceil(totalItems / itemsPerPage) && handlePageChange(currentPage + 1)}
-              disabled={currentPage === 1}
+              on:click={() => $currentPage > 1 && handlePageChange($currentPage - 1)}
+              disabled={$currentPage === 1}
               class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Anterior
             </button>
             <button 
-              on:click={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
+              on:click={() => handlePageChange($currentPage + 1)}
+              disabled={$currentPage >= Math.ceil($totalItems / itemsPerPage)}
               class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Siguiente
@@ -305,16 +283,16 @@
           <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
               <p class="text-sm text-gray-700">
-                Mostrando <span class="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span class="font-medium">
-                  {Math.min(currentPage * itemsPerPage, totalItems)}
-                </span> de <span class="font-medium">{totalItems}</span> resultados
+                Mostrando <span class="font-medium">{($currentPage - 1) * itemsPerPage + 1}</span> a <span class="font-medium">
+                  {Math.min($currentPage * itemsPerPage, $totalItems)}
+                </span> de <span class="font-medium">{$totalItems}</span> resultados
               </p>
             </div>
             <div>
               <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 <button
-                  on:click={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
+                  on:click={() => handlePageChange($currentPage - 1)}
+                  disabled={$currentPage === 1}
                   class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="sr-only">Anterior</span>
@@ -322,17 +300,26 @@
                     <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
                 </button>
-                {#each Array.from({ length: Math.ceil(totalItems / itemsPerPage) }, (_, i) => i + 1) as pageNumber}
-                  <button
-                    on:click={() => handlePageChange(pageNumber)}
-                    class="px-4 py-2 border-t-2 font-medium text-sm {pageNumber === currentPage ? 'text-blue-600 border-blue-500' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent'}"
-                  >
-                    {pageNumber}
-                  </button>
+                {#each Array(Math.ceil($totalItems / itemsPerPage)) as _, i}
+                  {#if i + 1 === $currentPage || 
+                      i + 1 === 1 || 
+                      i + 1 === Math.ceil($totalItems / itemsPerPage) || 
+                      (i + 1 >= $currentPage - 1 && i + 1 <= $currentPage + 1)}
+                    <button
+                      on:click={() => handlePageChange(i + 1)}
+                      class="relative inline-flex items-center px-4 py-2 border text-sm font-medium {i + 1 === $currentPage ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}"
+                    >
+                      {i + 1}
+                    </button>
+                  {:else if (i + 1 === $currentPage - 2 || i + 1 === $currentPage + 2) && i + 1 !== 1 && i + 1 !== Math.ceil($totalItems / itemsPerPage)}
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                      ...
+                    </span>
+                  {/if}
                 {/each}
                 <button
-                  on:click={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
+                  on:click={() => handlePageChange($currentPage + 1)}
+                  disabled={$currentPage >= Math.ceil($totalItems / itemsPerPage)}
                   class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="sr-only">Siguiente</span>
@@ -349,7 +336,7 @@
   {/if}
 
   <!-- Create Institution Modal -->
-  {#if showModal}
+  {#if $showModal}
     <div 
       class="fixed inset-0 overflow-y-auto z-50" 
       role="dialog" 
@@ -361,11 +348,15 @@
         <div 
           class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
           on:click={closeModal}
-          on:keydown|self={(e) => e.key === 'Escape' && closeModal()}
+          on:keydown|self={(e) => {
+            if (e instanceof KeyboardEvent && e.key === 'Escape') {
+              closeModal();
+            }
+          }}
           role="button"
           tabindex="0"
           aria-label="Cerrar modal"
-          transition:fade={{ duration: 150 }}
+          transition:fade
         ></div>
 
         <!-- Modal panel -->
@@ -376,7 +367,8 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-headline"
-          transition:scale={{ duration: 200 }}
+          in:fly={{ y: 50, duration: 200 }}
+          out:fly={{ y: 0, duration: 200, opacity: 0 }}
         >
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
             <div class="sm:flex sm:items-start">
@@ -385,10 +377,10 @@
                   Nueva Institución
                 </h3>
                 
-                {#if error}
+                {#if $error}
                   <div class="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
                     <p class="font-bold">Error</p>
-                    <p>{error}</p>
+                    <p>{$error}</p>
                   </div>
                 {/if}
 
@@ -398,13 +390,13 @@
                     <input
                       type="text"
                       id="name"
-                      bind:value={formData.name}
+                      bind:value={$formData.name}
                       class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.name}
-                      class:border-gray-300={!formErrors.name}
+                      class:border-red-300={!!$formErrors.name}
+                      class:border-gray-300={!$formErrors.name}
                     />
-                    {#if formErrors.name}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.name}</p>
+                    {#if $formErrors.name}
+                      <p class="mt-1 text-sm text-red-600">{$formErrors.name}</p>
                     {/if}
                   </div>
 
@@ -413,14 +405,14 @@
                     <input
                       type="text"
                       id="cuit"
-                      bind:value={formData.cuit}
+                      bind:value={$formData.cuit}
                       placeholder="Ej: 30-12345678-9"
                       class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.cuit}
-                      class:border-gray-300={!formErrors.cuit}
+                      class:border-red-300={!!$formErrors.cuit}
+                      class:border-gray-300={!$formErrors.cuit}
                     />
-                    {#if formErrors.cuit}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.cuit}</p>
+                    {#if $formErrors.cuit}
+                      <p class="mt-1 text-sm text-red-600">{$formErrors.cuit}</p>
                     {/if}
                   </div>
 
@@ -429,7 +421,7 @@
                     <input
                       type="text"
                       id="address"
-                      bind:value={formData.address}
+                      bind:value={$formData.address}
                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
@@ -439,7 +431,7 @@
                     <input
                       type="tel"
                       id="phone"
-                      bind:value={formData.phone}
+                      bind:value={$formData.phone}
                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
@@ -449,13 +441,13 @@
                     <input
                       type="email"
                       id="email"
-                      bind:value={formData.email}
+                      bind:value={$formData.email}
                       class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.email}
-                      class:border-gray-300={!formErrors.email}
+                      class:border-red-300={!!$formErrors.email}
+                      class:border-gray-300={!$formErrors.email}
                     />
-                    {#if formErrors.email}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.email}</p>
+                    {#if $formErrors.email}
+                      <p class="mt-1 text-sm text-red-600">{$formErrors.email}</p>
                     {/if}
                   </div>
 
@@ -464,7 +456,7 @@
                     <input
                       type="url"
                       id="website"
-                      bind:value={formData.website}
+                      bind:value={$formData.website}
                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
@@ -473,7 +465,7 @@
                     <input
                       type="checkbox"
                       id="isActive"
-                      bind:checked={formData.isActive}
+                      bind:checked={$formData.isActive}
                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <label for="isActive" class="ml-2 block text-sm text-gray-700">
@@ -489,10 +481,10 @@
             <button
               type="button"
               on:click={handleSubmit}
-              disabled={isSubmitting}
+              disabled={$isSubmitting}
               class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {#if isSubmitting}
+              {#if $isSubmitting}
                 <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -505,7 +497,7 @@
             <button
               type="button"
               on:click={closeModal}
-              disabled={isSubmitting}
+              disabled={$isSubmitting}
               class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancelar

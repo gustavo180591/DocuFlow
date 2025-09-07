@@ -3,7 +3,6 @@
   import favicon from '$lib/assets/favicon.svg';
   import { onMount } from 'svelte';
 
-  let { children } = $props();
   let mobileMenuOpen = false;
 
   function toggleMobileMenu() {
@@ -97,14 +96,14 @@
         </button>
       </div>
       <div class="mt-3 px-2 space-y-1">
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Tu perfil</a>
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Configuración</a>
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Cerrar sesión</a>
+        <a href="/perfil" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Tu perfil</a>
+        <a href="/configuracion" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Configuración</a>
+        <a href="/auth/signout" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Cerrar sesión</a>
       </div>
     </div>
   </div>
 </nav>
 
 <main class="min-h-screen bg-gray-50">
-  {@render children?.()}
+  <slot />
 </main>

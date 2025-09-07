@@ -29,7 +29,7 @@ function getRetryDelay(attempt: number): number {
 }
 
 // Process a single job
-async function processJob(job: Job & { payload: any }) {
+export async function processJob(job: Job & { payload: any }) {
   const startTime = new Date();
   let result: any = { metrics: { startedAt: startTime.toISOString() } };
   let error = null;

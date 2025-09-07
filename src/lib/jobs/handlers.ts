@@ -1,69 +1,540 @@
-import { Job, JobType, JobStatus } from '@prisma/client';
-import { PrismaClient } from '@prisma/client';
-import { 
-  OcrPayload, 
-  ParsingPayload, 
-  ValidationPayload, 
-  ExportPayload, 
-  JobWithPayload,
-  isOcrPayload,
-  isParsingPayload,
-  isValidationPayload,
-  isExportPayload,
-  JobMetrics
-} from './types';
+// src/lib/jobs/handlers.ts
+import { PrismaClient, Job, JobType, JobStatus, Prisma } from '@prisma/client';
+
+// Define payload types
+type OcrPayload = {
+  documentId: string;
+  sha256: string;
+  filePath: string;
+};
+
+type ParsingPayload = {
+  documentId: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+};
+
+type ValidationPayload = {
+  documentId: string;
+  parsedData: Record<string, unknown>;
+};
+
+type ExportPayload = {
+  documentId: string;
+  format: 'PDF' | 'CSV' | 'JSON';
+  data: Record<string, unknown>;
+};
+
+type JobMetrics = {
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  retryCount?: number;
+  error?: string;
+  pagesProcessed?: number;
+  exportFormat?: string;
+};
+
+// Extended Job type that includes our payload
+type JobWithPayload = Omit<Job, 'payload' | 'result' | 'metrics' | 'error'> & {
+  payload: OcrPayload | ParsingPayload | ValidationPayload | ExportPayload;
+  result?: Record<string, unknown> | null;
+  metrics?: JobMetrics;
+  error?: string | null;
+};
 
 const prisma = new PrismaClient();
 
-// Helper to update job metrics
-async function updateJobMetrics(jobId: string, metrics: Partial<JobMetrics>): Promise<void> {
-  const updateData = {
-    metrics: {
-      ...metrics,
-      durationMs: metrics.startedAt && metrics.finishedAt 
-        ? new Date(metrics.finishedAt).getTime() - new Date(metrics.startedAt).getTime()
-        : undefined
-    }
-  };
+// Type guards
+function isOcrPayload(payload: unknown): payload is OcrPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'documentId' in payload &&
+    'sha256' in payload &&
+    'filePath' in payload
+  );
+}
 
+function isParsingPayload(payload: unknown): payload is ParsingPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'documentId' in payload &&
+    'text' in payload
+  );
+}
+
+function isValidationPayload(payload: unknown): payload is ValidationPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'documentId' in payload &&
+    'parsedData' in payload
+  );
+}
+
+function isExportPayload(payload: unknown): payload is ExportPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'documentId' in payload &&
+    'format' in payload &&
+    'data' in payload
+  );
+}
+
+// Utility functions
+function nowISO() { 
+  return new Date().toISOString(); 
+}
+
+async function updateJobMetrics(jobId: string, metrics: Partial<JobMetrics>): Promise<void> {
   await prisma.job.update({
     where: { id: jobId },
-    data: updateData
+    data: { 
+      metrics: {
+        ...(await prisma.job.findUnique({ where: { id: jobId } }))?.metrics as object || {},
+        ...metrics
+      }
+    }
   });
 }
 
-// Process OCR job
-export async function processOCR(job: JobWithPayload): Promise<void> {
-  if (!isOcrPayload(job.payload)) {
-    throw new Error('Invalid OCR payload');
+// Job handlers
+export const jobHandlers = {
+  async processOCR(job: JobWithPayload): Promise<void> {
+    if (!isOcrPayload(job.payload)) {
+      throw new Error('Invalid OCR payload');
+    }
+
+    const { documentId, filePath } = job.payload;
+    
+    try {
+      // Update job status to processing
+      await updateJobMetrics(job.id, { 
+        status: 'PROCESSING',
+        startedAt: nowISO()
+      });
+
+      // Simulate OCR processing
+      // In a real implementation, this would call an OCR service
+      const ocrResult = {
+        text: 'Sample extracted text',
+        confidence: 0.95,
+        pages: 1
+      };
+
+      // Update job with results
+      await prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          result: ocrResult as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          metrics: {
+            status: 'COMPLETED',
+            finishedAt: nowISO(),
+            durationMs: 1000 // Simulated processing time
+          }
+        }
+      });
+
+      // Create a new parsing job
+      await prisma.job.create({
+        data: {
+          type: 'PARSING',
+          status: 'PENDING',
+          payload: {
+            documentId,
+            text: ocrResult.text,
+            metadata: { source: 'ocr' }
+          } as ParsingPayload,
+          priority: 1
+        }
+      });
+    } catch (error) {
+      await updateJobMetrics(job.id, { 
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        finishedAt: nowISO()
+      });
+      throw error;
+    }
+  },
+
+  async processParsing(job: JobWithPayload): Promise<void> {
+    if (!isParsingPayload(job.payload)) {
+      throw new Error('Invalid Parsing payload');
+    }
+
+    const { documentId, text } = job.payload;
+    
+    try {
+      await updateJobMetrics(job.id, { 
+        status: 'PROCESSING',
+        startedAt: nowISO()
+      });
+
+      // Simulate parsing logic
+      const parsedData = {
+        entities: [
+          { type: 'PERSON', value: 'John Doe', confidence: 0.9 },
+          { type: 'ORGANIZATION', value: 'ACME Corp', confidence: 0.85 }
+        ],
+        metadata: {
+          language: 'en',
+          wordCount: text.split(/\s+/).length
+        }
+      };
+
+      // Update job with results
+      await prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          result: parsedData as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          metrics: {
+            status: 'COMPLETED',
+            finishedAt: nowISO(),
+            durationMs: 500 // Simulated processing time
+          }
+        }
+      });
+
+      // Create a new validation job
+      await prisma.job.create({
+        data: {
+          type: 'VALIDATION',
+          status: 'PENDING',
+          payload: {
+            documentId,
+            parsedData
+          } as ValidationPayload,
+          priority: 1
+        }
+      });
+    } catch (error) {
+      await updateJobMetrics(job.id, { 
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        finishedAt: nowISO()
+      });
+      throw error;
+    }
+  },
+
+  async processValidation(job: JobWithPayload): Promise<void> {
+    if (!isValidationPayload(job.payload)) {
+      throw new Error('Invalid Validation payload');
+    }
+
+    const { documentId, parsedData } = job.payload;
+    
+    try {
+      await updateJobMetrics(job.id, { 
+        status: 'PROCESSING',
+        startedAt: nowISO()
+      });
+
+      // Simulate validation logic
+      const validationResult = {
+        isValid: true,
+        issues: [],
+        validatedData: parsedData,
+        timestamp: nowISO()
+      };
+
+      // Update job with results
+      await prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          result: validationResult as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          metrics: {
+            status: 'COMPLETED',
+            finishedAt: nowISO(),
+            durationMs: 300 // Simulated processing time
+          }
+        }
+      });
+
+      // Create export jobs for different formats
+      const formats: Array<'PDF' | 'CSV' | 'JSON'> = ['PDF', 'CSV', 'JSON'];
+      await Promise.all(
+        formats.map(format => 
+          prisma.job.create({
+            data: {
+              type: 'EXPORT',
+              status: 'PENDING',
+              payload: {
+                documentId,
+                format,
+                data: validationResult.validatedData
+              } as ExportPayload,
+              priority: 1
+            }
+          })
+        )
+      );
+    } catch (error) {
+      await updateJobMetrics(job.id, { 
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        finishedAt: nowISO()
+      });
+      throw error;
+    }
+  },
+
+  async processExport(job: JobWithPayload): Promise<void> {
+    if (!isExportPayload(job.payload)) {
+      throw new Error('Invalid Export payload');
+    }
+
+    const { documentId, format, data } = job.payload;
+    
+    try {
+      await updateJobMetrics(job.id, { 
+        status: 'PROCESSING',
+        startedAt: nowISO(),
+        exportFormat: format
+      });
+
+      // Simulate export logic
+      let exportResult: string;
+      switch (format) {
+        case 'PDF':
+          exportResult = 'PDF_EXPORTED';
+          break;
+        case 'CSV':
+          exportResult = 'CSV_EXPORTED';
+          break;
+        case 'JSON':
+          exportResult = 'JSON_EXPORTED';
+          break;
+        default:
+          throw new Error(`Unsupported export format: ${format}`);
+      }
+
+      // Update job with results
+      await prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          result: { exportResult } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          metrics: {
+            status: 'COMPLETED',
+            finishedAt: nowISO(),
+            durationMs: 200, // Simulated processing time
+            exportFormat: format
+          }
+        }
+      });
+    } catch (error) {
+      await updateJobMetrics(job.id, { 
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        finishedAt: nowISO()
+      });
+      throw error;
+    }
+  }
+};
+
+export async function processJob(job: JobWithPayload): Promise<void> {
+  const handler = {
+    [JobType.OCR]: jobHandlers.processOCR,
+    [JobType.PARSING]: jobHandlers.processParsing,
+    [JobType.VALIDATION]: jobHandlers.processValidation,
+    [JobType.EXPORT]: jobHandlers.processExport
+  }[job.type];
+
+  if (!handler) {
+    throw new Error(`No handler found for job type: ${job.type}`);
   }
 
-  const { documentId, filePath, sha256 } = job.payload;
-  const startedAt = new Date().toISOString();
+  await handler(job);
+}
+  // Calcula durationMs si se proveen start/finish
+  const durationMs =
+    partial.startedAt && partial.finishedAt
+      ? new Date(partial.finishedAt).getTime() - new Date(partial.startedAt).getTime()
+      : partial.durationMs;
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { metrics: { ...(partial as any), durationMs } as any }
+  });
+}
+
+async function setJobResult(jobId: string, result: Record<string, unknown>) {
+  await prisma.job.update({ 
+    where: { id: jobId }, 
+    data: { 
+      result: result as any // Type assertion to handle Prisma's JsonValue type
+    } 
+  });
+}
+
+async function enqueueNext(type: JobType, payload: Record<string, unknown>, documentId?: string, priority = 0) {
+  await prisma.job.create({ 
+    data: { 
+      type, 
+      payload: payload as any, // Type assertion to handle Prisma's JsonValue type
+      documentId, 
+      priority 
+    } 
+  });
+}
+
+/* ------------------------------ OCR ------------------------------ */
+export async function processOCR(job: Job) {
+  const startedAt = nowISO();
+  const t0 = Date.now();
+
+  const p = (job as JobWithPayload).payload;
+  assert(isOcrPayload(p), 'OCR payload inválido');
+  const { sha256, documentId } = p as OcrPayload;
+
+  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  assert(!!doc, `Documento no encontrado: ${documentId}`);
+
+  // TODO: integrar con tu servicio real de OCR
+  // const { text, pages } = await extractTextFromPdf(filePath ?? path.join(process.env.UPLOAD_DIR ?? '/data/uploads', `${sha256}.pdf`));
+  const pages = 1; // demo
+
+  // Guarda resultado mínimo útil
+  await setJobResult(job.id, { pages });
+
+  // Encolá PARSING
+  await enqueueNext(JobType.PARSING, { documentId, sha256 }, documentId);
+
+  await updateJobMetrics(job.id, {
+    startedAt,
+    finishedAt: nowISO(),
+    durationMs: Date.now() - t0,
+    status: 'OK'
+  });
+}
+
+/* ------------------------------ PARSING ------------------------------ */
+export async function processPARSING(job: Job) {
+  const startedAt = nowISO();
+  const t0 = Date.now();
+
+  const p = (job as JobWithPayload).payload;
+  assert(isParsingPayload(p), 'PARSING payload inválido');
+  const { documentId, sha256 } = p as ParsingPayload;
+
+  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  assert(!!doc, `Documento no encontrado: ${documentId}`);
+
+  // TODO: recuperar texto crudo de tu tabla Extraction o re-extraer según tu diseño.
+  // TODO: parseo específico (ej.: comprobante bancario vs listado de aportes)
+  const parsed = {
+    kind: 'BANK_RECEIPT', // o 'CONTRIB_LIST' según tu heurística
+    fieldsDetected: 10,
+    sha256
+  };
+
+  await setJobResult(job.id, parsed);
+
+  // Idempotencia simple: evitá duplicar VALIDATION en curso/hecha
+  const exists = await prisma.job.findFirst({
+    where: {
+      type: JobType.VALIDATION,
+      documentId,
+      status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING, JobStatus.DONE] }
+    }
+  });
   
-  try {
-    // Mark job as processing
-    await prisma.job.update({
-      where: { id: job.id },
-      data: { 
-        status: JobStatus.PROCESSING,
-        startedAt: new Date(startedAt)
-      }
-    });
+  if (!exists) {
+    await enqueueNext(JobType.VALIDATION, { documentId }, documentId);
+  }
 
-    // TODO: Implement actual OCR processing
-    // const ocrResult = await ocrService.processDocument(filePath || `${process.env.UPLOAD_DIR}/${sha256}`);
-    const ocrResult = {
-      text: 'Sample extracted text',
-      pages: 1
-    };
+  await updateJobMetrics(job.id, {
+    startedAt,
+    finishedAt: nowISO(),
+    durationMs: Date.now() - t0,
+    status: 'OK'
+  });
+}
 
-    // Update job with result
-    await prisma.job.update({
-      where: { id: job.id },
-      data: { 
-        status: JobStatus.DONE,
-        result: ocrResult,
+/* ------------------------------ VALIDATION ------------------------------ */
+export async function processVALIDATION(job: Job) {
+  const startedAt = nowISO();
+  const t0 = Date.now();
+
+  const p = (job as JobWithPayload).payload;
+  assert(isValidationPayload(p), 'VALIDATION payload inválido');
+  const { documentId } = p as ValidationPayload;
+
+  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  assert(!!doc, `Documento no encontrado: ${documentId}`);
+
+  // TODO: reglas de negocio (campos obligatorios, tolerancias, cruces básicos)
+  const valid = true; // demo
+
+  await setJobResult(job.id, { valid });
+
+  // Encolá EXPORT si todo ok
+  await enqueueNext(JobType.EXPORT, { documentId, format: 'PDF' }, documentId);
+
+  await updateJobMetrics(job.id, {
+    startedAt,
+    finishedAt: nowISO(),
+    durationMs: Date.now() - t0,
+    status: valid ? 'OK' : 'WARN'
+  });
+}
+
+/* ------------------------------ EXPORT ------------------------------ */
+export async function processEXPORT(job: Job) {
+  const startedAt = nowISO();
+  const t0 = Date.now();
+
+  const p = (job as JobWithPayload).payload;
+  assert(isExportPayload(p), 'EXPORT payload inválido');
+  const { documentId, format = 'PDF' } = p as ExportPayload;
+
+  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  assert(!!doc, `Documento no encontrado: ${documentId}`);
+
+  // TODO: generar el artefacto real (PDF/CSV). Acá solo dejamos un path simulado.
+  const outputPath = `/data/extractions/report-${documentId}.${format.toLowerCase()}`;
+  await setJobResult(job.id, { outputPath, format });
+
+  await updateJobMetrics(job.id, {
+    startedAt,
+    finishedAt: nowISO(),
+    durationMs: Date.now() - t0,
+    status: 'OK'
+  });
+}
+
+// Export job handlers for the worker
+// Export job handlers for the worker
+export const jobHandlers = {
+  [JobType.OCR]: processOCR,
+  [JobType.PARSING]: processPARSING,
+  [JobType.VALIDATION]: processVALIDATION,
+  [JobType.EXPORT]: processEXPORT,
+};
+
+// Sample OCR result for testing
+const sampleOcrResult = {
+  text: 'Sample extracted text',
+  pages: 1
+};
+
+// Update job with result
+async function updateJobWithResult(jobId: string, result: any) {
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { 
+      status: JobStatus.DONE,
+      result: result,
         finishedAt: new Date()
       }
     });

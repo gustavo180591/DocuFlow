@@ -1,5 +1,5 @@
-<script lang="ts">
-  interface Document {
+<script context="module" lang="ts">
+  export interface Document {
     id: string;
     type: 'ID' | 'RECEIPT' | 'CONTRACT' | 'STATEMENT' | 'OTHER';
     originalName: string;
@@ -22,23 +22,45 @@
     processedAt: string | null;
   }
 
-  const { data } = $props<{ data: { documents: Document[] } }>();
+  export interface PageData {
+    documents: Document[];
+  }
+</script>
+
+<script lang="ts">
+  import { page } from '$app/stores';
+  
+  export let data: PageData;
   
   let selectedStatus = 'all';
   let searchQuery = '';
   let selectedDocuments: string[] = [];
+  let currentPage = 1;
+  const itemsPerPage = 10;
+  
+  // Calculate paginated documents
+  $: paginatedDocuments = filteredDocuments.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  
+  // Update current page if it's out of bounds after filtering
+  $: if (filteredDocuments.length > 0 && (currentPage - 1) * itemsPerPage >= filteredDocuments.length) {
+    currentPage = Math.ceil(filteredDocuments.length / itemsPerPage) || 1;
+  }
   
   // Use the data from the server
-  let documents = data?.documents || [];
-  let isLoading = $derived(!documents || documents.length === 0);
-
-  // Filter documents
-  let filteredDocuments = $derived(documents.filter(doc => {
-    const matchesSearch = doc.originalName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         (doc.member && `${doc.member.firstName} ${doc.member.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = selectedStatus === 'all' || doc.jobs.some(job => job.status === selectedStatus);
+  $: documents = data?.documents || [];
+  $: isLoading = !documents || documents.length === 0;
+  $: filteredDocuments = documents.filter((doc: Document) => {
+    const searchLower = searchQuery.toLowerCase();
+    const memberName = doc.member ? `${doc.member.firstName} ${doc.member.lastName}`.toLowerCase() : '';
+    const matchesSearch = doc.originalName.toLowerCase().includes(searchLower) || 
+                         (doc.member && memberName.includes(searchLower));
+    const matchesStatus = selectedStatus === 'all' || 
+                         doc.jobs.some((job: { status: string }) => job.status === selectedStatus);
     return matchesSearch && matchesStatus;
-  }));
+  });
 
   // Toggle document selection
   function toggleDocumentSelection(id: string) {
@@ -51,7 +73,7 @@
   function toggleSelectAll() {
     selectedDocuments = selectedDocuments.length === filteredDocuments.length 
       ? [] 
-      : filteredDocuments.map(doc => doc.id);
+      : filteredDocuments.map((doc: Document) => doc.id);
   }
 
   // Get document type display text
@@ -226,7 +248,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
-            {#each filteredDocuments as document (document.id)}
+            {#each paginatedDocuments as document (document.id)}
               <tr class={selectedDocuments.includes(document.id) ? 'bg-gray-50' : ''}>
                 <td class="relative w-16 px-8">
                   <input 
@@ -300,13 +322,21 @@
       <!-- Pagination -->
       <div class="mt-4 flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
         <div class="flex flex-1 justify-between">
-          <a href="#" class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Anterior</a>
-          <a href="#" class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Siguiente</a>
+          <button class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" disabled={currentPage <= 1} on:click={() => currentPage--}>
+            Anterior
+          </button>
+          <button class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" disabled={currentPage * itemsPerPage >= documents.length} on:click={() => currentPage++}>
+            Siguiente
+          </button>
         </div>
         <div class="flex flex-1 items-center justify-between">
           <div>
             <p class="text-sm text-gray-700">
-              Mostrando <span class="font-medium">1</span> a <span class="font-medium">{filteredDocuments.length}</span> de <span class="font-medium">{documents.length}</span> resultados
+              Mostrando <span class="font-medium">
+                {filteredDocuments.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+              </span> a <span class="font-medium">
+                {Math.min(currentPage * itemsPerPage, filteredDocuments.length)}
+              </span> de <span class="font-medium">{filteredDocuments.length}</span> resultados
             </p>
           </div>
         </div>
@@ -316,37 +346,125 @@
 </div>
 
 <style>
-  @reference "tailwindcss";
-  
+  /* Using plain CSS instead of @apply directives for better compatibility */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 w-auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    border: 1px solid transparent;
+    background-color: #4f46e5;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: white;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    width: auto;
+  }
+  
+  .btn-primary:hover {
+    background-color: #4338ca;
+  }
+  
+  .btn-primary:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    --ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+    box-shadow: var(--ring-offset-shadow), var(--ring-shadow), var(--tw-shadow, 0 0 #0000);
+    --tw-ring-color: rgba(99, 102, 241, 0.5);
+    --tw-ring-offset-width: 2px;
   }
   
   .input {
-    @apply block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6;
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 0;
+    padding: 0.375rem 0.75rem;
+    color: #111827;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --tw-ring-inset: inset;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-offset-color: #fff;
+    --tw-ring-color: rgba(99, 102, 241, 0.5);
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+    font-size: 0.875rem;
+    line-height: 1.5rem;
   }
   
   .select {
-    @apply block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 text-sm leading-6;
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 0;
+    padding: 0.375rem 2.5rem 0.375rem 0.75rem;
+    color: #111827;
+    --tw-ring-inset: inset;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-offset-color: #fff;
+    --tw-ring-color: rgba(99, 102, 241, 0.5);
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+    font-size: 0.875rem;
+    line-height: 1.5rem;
   }
   
   .badge-success {
-    @apply inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background-color: #dcfce7;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #166534;
   }
   
   .badge-info {
-    @apply inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background-color: #dbeafe;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #1e40af;
   }
   
   .badge-warning {
-    @apply inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background-color: #fef9c3;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #854d0e;
   }
   
   .badge-error {
-    @apply inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background-color: #fee2e2;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #991b1b;
   }
-
+  
   .badge-gray {
-    @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #1f2937;
   }
 </style>

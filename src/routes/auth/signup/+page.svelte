@@ -45,7 +45,7 @@
       });
       
     } catch (e) {
-      error = e.message || 'Error al crear la cuenta. Por favor, inténtalo de nuevo.';
+      error = (e as Error)?.message || 'Error al crear la cuenta. Por favor, inténtalo de nuevo.';
       console.error('Error en el registro:', e);
     } finally {
       isLoading = false;

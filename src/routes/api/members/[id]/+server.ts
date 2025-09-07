@@ -2,6 +2,10 @@ import { json, error } from '@sveltejs/kit';
 import { prisma } from '$lib/server/prisma';
 import type { RequestHandler } from './$types';
 
+interface ErrorWithStatus extends Error {
+  status?: number;
+}
+
 export const GET: RequestHandler = async ({ params }) => {
   try {
     const member = await prisma.member.findUnique({
@@ -25,8 +29,14 @@ export const GET: RequestHandler = async ({ params }) => {
     }
 
     return json(member);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Error fetching member:', err);
+    const errorWithStatus = err as ErrorWithStatus;
+    
+    if (errorWithStatus.status === 404) {
+      throw error(404, 'Member not found');
+    }
+    
     throw error(500, 'Error fetching member');
   }
 };
@@ -65,8 +75,8 @@ export const PUT: RequestHandler = async ({ request, params }) => {
       where: { id: params.id },
       data: {
         dni: data.dni,
-        firstName: data.firstName,
-        lastName: data.lastName,
+        nombre: data.firstName,
+        apellido: data.lastName,
         email: data.email,
         phone: data.phone,
         address: data.address,
@@ -87,11 +97,22 @@ export const PUT: RequestHandler = async ({ request, params }) => {
     });
 
     return json(updatedMember);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Error updating member:', err);
-    if (err.status === 400 || err.status === 404 || err.status === 409) {
-      throw err;
+    const errorWithStatus = err as ErrorWithStatus;
+    
+    if (errorWithStatus.status === 400) {
+      throw error(400, 'Invalid request data');
     }
+    
+    if (errorWithStatus.status === 404) {
+      throw error(404, 'Institution not found');
+    }
+    
+    if (errorWithStatus.status === 409) {
+      throw error(409, 'Another member with this DNI already exists');
+    }
+    
     throw error(500, 'Error updating member');
   }
 };
@@ -125,11 +146,18 @@ export const DELETE: RequestHandler = async ({ params }) => {
     });
 
     return new Response(null, { status: 204 });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Error deleting member:', err);
-    if (err.status === 400 || err.status === 404) {
-      throw err;
+    const errorWithStatus = err as ErrorWithStatus;
+    
+    if (errorWithStatus.status === 400) {
+      throw error(400, 'Cannot delete member with active documents or dues');
     }
+    
+    if (errorWithStatus.status === 404) {
+      throw error(404, 'Member not found');
+    }
+    
     throw error(500, 'Error deleting member');
   }
 };

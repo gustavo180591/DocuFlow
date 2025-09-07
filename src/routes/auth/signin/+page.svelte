@@ -98,7 +98,7 @@
         </div>
 
         <div class="text-sm">
-          <a href="#" class="font-medium text-indigo-600 hover:text-indigo-500">
+          <a href="/auth/forgot-password" class="font-medium text-indigo-600 hover:text-indigo-500">
             ¿Olvidaste tu contraseña?
           </a>
         </div>

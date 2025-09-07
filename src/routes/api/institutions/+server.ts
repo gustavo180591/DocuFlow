@@ -78,11 +78,23 @@ export const POST: RequestHandler = async ({ request }) => {
     });
 
     return json(institution, { status: 201 });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Error creating institution:', err);
-    if (err.status === 400 || err.status === 409) {
-      throw err;
+    
+    interface ErrorWithStatus extends Error {
+      status?: number;
     }
+    
+    const errorWithStatus = err as ErrorWithStatus;
+    
+    if (errorWithStatus?.status === 400) {
+      throw error(400, 'Invalid request data');
+    }
+    
+    if (errorWithStatus?.status === 409) {
+      throw error(409, 'An institution with this CUIT already exists');
+    }
+    
     throw error(500, 'Error creating institution');
   }
 };

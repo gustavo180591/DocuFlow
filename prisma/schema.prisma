@@ -30,24 +30,24 @@ model Institution {
 }
 
 model Member {
-  id             String       @id @default(cuid())
-  dni            String       @unique
-  nombre         String
-  apellido       String
-  email          String?      @unique
-  phone          String?
-  address        String?      @db.Text
-  birthDate      DateTime?
-  nationality    String?
-  status         MemberStatus @default(ACTIVE)
-  joinedAt       DateTime     @default(now())
-  institution    Institution  @relation(fields: [institutionId], references: [id], onDelete: Restrict)
-  institutionId  String
-  documents      Document[]
-  memberDues     MemberDue[]
-  links          Link[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id            String       @id @default(cuid())
+  dni           String       @unique
+  nombre        String
+  apellido      String
+  email         String?      @unique
+  phone         String?
+  address       String?      @db.Text
+  birthDate     DateTime?
+  nationality   String?
+  status        MemberStatus @default(ACTIVE)
+  joinedAt      DateTime     @default(now())
+  institution   Institution  @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  institutionId String
+  documents     Document[]
+  memberDues    MemberDue[]
+  links         Link[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@index([apellido, nombre])
   @@index([institutionId])
@@ -141,23 +141,23 @@ model Document {
 }
 
 model Job {
-  id           String     @id @default(cuid())
-  type         JobType
-  status       JobStatus  @default(QUEUED)
-  payload      Json
-  result       Json?
-  metrics      Json?      // Para guardar métricas/telemetría
-  priority     Int        @default(0)
-  attempts     Int        @default(0)
-  maxAttempts  Int        @default(3)
-  lastError    String?    @db.Text
-  scheduledAt  DateTime?
-  createdAt    DateTime   @default(now())
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  lockedAt     DateTime?
-  documentId   String?
-  document     Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  type        JobType
+  status      JobStatus @default(QUEUED)
+  payload     Json
+  result      Json?
+  metrics     Json? // Para guardar métricas/telemetría
+  priority    Int       @default(0)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lastError   String?   @db.Text
+  scheduledAt DateTime?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  lockedAt    DateTime?
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([status, priority, createdAt])
   @@index([scheduledAt])

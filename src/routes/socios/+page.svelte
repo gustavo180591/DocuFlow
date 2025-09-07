@@ -1,33 +1,95 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade } from 'svelte/transition';
+  import { fade, scale } from 'svelte/transition';
+  import { slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+  import { flip } from 'svelte/animate';
+
+  // Types
+  type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
   
-  let members = [];
-  let institutions = [];
+  interface Institution {
+    id: string;
+    name: string;
+  }
+  
+  interface Member {
+    id: string;
+    dni: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    birthDate?: string;
+    nationality: string;
+    status: MemberStatus;
+    joinedAt: string;
+    institutionId: string;
+    institution?: Institution;
+  }
+  
+  interface MemberFormData {
+    dni: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    address: string;
+    birthDate: string;
+    nationality: string;
+    status: MemberStatus;
+    joinedAt: string;
+    institutionId: string;
+  }
+  
+  let members: Member[] = [];
+  let institutions: Institution[] = [];
   let loading = true;
-  let error = null;
+  let error: string | null = null;
   let showModal = false;
-  let formData = {
+  
+  // Form data with all required fields from MemberFormData
+  let formData: MemberFormData = {
     dni: '',
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     address: '',
-    birthDate: '',
+    birthDate: new Date().toISOString().split('T')[0],
     nationality: 'Argentina',
     status: 'PENDING_VERIFICATION',
-    joinedAt: new Date().toISOString().split('T')[0],
-    institutionId: ''
+    joinedAt: new Date().toISOString(),
+    institutionId: institutions[0]?.id || ''
   };
-  let formErrors = {};
+  
+  let formErrors: Partial<Record<keyof MemberFormData, string>> = {};
   let isSubmitting = false;
   let searchTerm = '';
   let currentPage = 1;
   const itemsPerPage = 10;
   let totalItems = 0;
   let selectedInstitution = '';
-  let selectedStatus = '';
+  let selectedStatus: MemberStatus | '' = '';
+
+  const getStatusBadgeClass = (status: MemberStatus = 'INACTIVE'): string => {
+    switch (status) {
+      case 'ACTIVE': return 'bg-green-100 text-green-800';
+      case 'SUSPENDED': return 'bg-yellow-100 text-yellow-800';
+      case 'PENDING_VERIFICATION': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusLabel = (status: MemberStatus = 'INACTIVE'): string => {
+    switch (status) {
+      case 'ACTIVE': return 'Activo';
+      case 'SUSPENDED': return 'Suspendido';
+      case 'PENDING_VERIFICATION': return 'Pendiente';
+      default: return 'Inactivo';
+    }
+  };
 
   const fetchMembers = async () => {
     try {
@@ -47,22 +109,22 @@
         throw new Error('Error al cargar los socios');
       }
       
-      const data = await response.json();
+      const data = await response.json() as { data: Member[], meta: { total: number } };
       members = data.data;
       totalItems = data.meta.total;
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error:', err);
-      error = err.message;
+      error = err instanceof Error ? err.message : 'Error desconocido';
     } finally {
       loading = false;
     }
   };
 
-  const fetchInstitutions = async () => {
+  const fetchInstitutions = async (): Promise<void> => {
     try {
       const response = await fetch('/api/institutions');
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() as { data: Institution[] };
         institutions = data.data;
       }
     } catch (err) {
@@ -70,18 +132,27 @@
     }
   };
 
-  const handleSearch = (e) => {
+  const handleSearch = (e?: Event): void => {
     e?.preventDefault();
     currentPage = 1;
-    fetchMembers();
+    fetchMembers().catch(err => {
+      console.error('Error in handleSearch:', err);
+      error = err instanceof Error ? err.message : 'Error desconocido';
+    });
   };
 
-  const handlePageChange = (page) => {
+  const handlePageChange = (page: number): void => {
     currentPage = page;
-    fetchMembers();
+    fetchMembers().catch(err => {
+      console.error('Error in handlePageChange:', err);
+      error = err instanceof Error ? err.message : 'Error al cambiar de página';
+    });
   };
 
-  const openModal = () => {
+  // Modal and Form Functions
+  const closeModal = (): void => {
+    showModal = false;
+    // Reset form data when closing modal
     formData = {
       dni: '',
       firstName: '',
@@ -89,22 +160,53 @@
       email: '',
       phone: '',
       address: '',
-      birthDate: '',
+      birthDate: new Date().toISOString().split('T')[0],
       nationality: 'Argentina',
-      status: 'PENDING_VERIFICATION',
-      joinedAt: new Date().toISOString().split('T')[0],
+      status: 'PENDING_VERIFICATION' as MemberStatus,
+      joinedAt: new Date().toISOString(),
       institutionId: institutions[0]?.id || ''
     };
+    formErrors = {};
+  };
+
+  const openModal = (member?: Member): void => {
+    if (member) {
+      // Create a new form data object with all required fields
+      const newFormData: MemberFormData = {
+        dni: member.dni,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        email: member.email || '',
+        phone: member.phone || '',
+        address: member.address || '',
+        birthDate: member.birthDate || new Date().toISOString().split('T')[0],
+        nationality: member.nationality || 'Argentina',
+        status: member.status,
+        joinedAt: member.joinedAt || new Date().toISOString(),
+        institutionId: member.institution?.id || institutions[0]?.id || ''
+      };
+      formData = newFormData;
+    } else {
+      formData = {
+        dni: '',
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        address: '',
+        birthDate: new Date().toISOString().split('T')[0],
+        nationality: 'Argentina',
+        status: 'PENDING_VERIFICATION' as MemberStatus,
+        joinedAt: new Date().toISOString(),
+        institutionId: institutions[0]?.id || ''
+      };
+    }
     formErrors = {};
     showModal = true;
   };
 
-  const closeModal = () => {
-    showModal = false;
-  };
-
-  const validateForm = () => {
-    const errors = {};
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
     
     if (!formData.dni.trim()) {
       errors.dni = 'El DNI es requerido';
@@ -156,43 +258,15 @@
       
       await fetchMembers();
       closeModal();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error:', err);
-      error = err.message;
+      error = err instanceof Error ? err.message : 'Error desconocido';
     } finally {
       isSubmitting = false;
     }
   };
 
-  const getStatusBadgeClass = (status) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'bg-green-100 text-green-800';
-      case 'INACTIVE':
-        return 'bg-gray-100 text-gray-800';
-      case 'PENDING_VERIFICATION':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'SUSPENDED':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'Activo';
-      case 'INACTIVE':
-        return 'Inactivo';
-      case 'PENDING_VERIFICATION':
-        return 'Pendiente';
-      case 'SUSPENDED':
-        return 'Suspendido';
-      default:
-        return status;
-    }
-  };
+  // Status utility functions
 
   onMount(() => {
     fetchInstitutions().then(() => {
@@ -205,7 +279,7 @@
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-gray-800">Socios</h1>
     <button 
-      on:click={openModal}
+      on:click={() => openModal()}
       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
       disabled={institutions.length === 0}
     >
@@ -457,14 +531,20 @@
       class="fixed inset-0 overflow-y-auto" 
       role="dialog" 
       aria-modal="true"
-      transition:fade={{ duration: 150 }}
+      in:fade={{ duration: 150 }}
+      out:fade={{ duration: 150 }}
     >
       <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <!-- Background overlay -->
         <div 
           class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+          role="button"
+          tabindex="0"
           on:click={closeModal}
-          transition:opacity
+          on:keydown={(e) => e.key === 'Enter' && closeModal()}
+          in:fade
+          out:fade
+          aria-label="Cerrar modal"
         ></div>
 
         <!-- Modal panel -->
@@ -472,9 +552,8 @@
         
         <div 
           class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
-          transition:scale
-          in:scale-100
-          out:scale-95
+          in:scale
+          out:scale
         >
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div class="sm:flex sm:items-start">
