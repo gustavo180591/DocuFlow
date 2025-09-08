@@ -1,15 +1,7 @@
-import { PrismaClient, JobStatus, JobType, Job } from '@prisma/client';
+import { PrismaClient, JobStatus, JobType, type Job } from '@prisma/client';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { 
-  processOCR, 
-  processPARSING, 
-  processVALIDATION, 
-  processEXPORT,
-  isOcrPayload,
-  isParsingPayload,
-  isValidationPayload,
-  isExportPayload
-} from '../src/lib/jobs/handlers';
+import { processJob as processJobHandler } from '../src/lib/jobs/handlers';
+import type { JobWithPayload } from '../src/lib/jobs/handlers';
 
 const prisma = new PrismaClient();
 
@@ -29,13 +21,9 @@ function getRetryDelay(attempt: number): number {
 }
 
 // Process a single job
-export async function processJob(job: Job & { payload: any }) {
+async function processJob(job: Job & { payload: any }) {
   const startTime = new Date();
-  let result: any = { metrics: { startedAt: startTime.toISOString() } };
-  let error = null;
-  let nextJobType: JobType | null = null;
-  let nextJobPayload: any = null;
-
+  
   try {
     // Mark job as processing
     await prisma.job.update({
@@ -44,162 +32,140 @@ export async function processJob(job: Job & { payload: any }) {
         status: JobStatus.PROCESSING,
         startedAt: startTime,
         attempts: { increment: 1 },
-        lastError: null
+        lastError: null,
+        metrics: {
+          update: {
+            status: 'PROCESSING',
+            startedAt: startTime.toISOString(),
+            retryCount: (job.attempts || 0) + 1
+          }
+        }
       }
     });
 
-    // Process based on job type
-    switch (job.type) {
-      case JobType.OCR:
-        if (!isOcrPayload(job.payload)) {
-          throw new Error(`Invalid payload for OCR job: ${JSON.stringify(job.payload)}`);
-        }
-        result = { ...result, ...(await processOCR(job)) };
-        nextJobType = JobType.PARSING;
-        nextJobPayload = { documentId: job.payload.documentId, sha256: job.payload.sha256 };
-        break;
+    // Process the job using the handler
+    await processJobHandler({
+      ...job,
+      payload: job.payload,
+      metrics: { status: 'PROCESSING' },
+      updatedAt: new Date()
+    } as JobWithPayload);
 
-      case JobType.PARSING:
-        if (!isParsingPayload(job.payload)) {
-          throw new Error(`Invalid payload for PARSING job: ${JSON.stringify(job.payload)}`);
-        }
-        result = { ...result, ...(await processPARSING(job)) };
-        nextJobType = JobType.VALIDATION;
-        nextJobPayload = { documentId: job.payload.documentId };
-        break;
-
-      case JobType.VALIDATION:
-        if (!isValidationPayload(job.payload)) {
-          throw new Error(`Invalid payload for VALIDATION job: ${JSON.stringify(job.payload)}`);
-        }
-        result = { ...result, ...(await processVALIDATION(job)) };
-        nextJobType = JobType.EXPORT;
-        nextJobPayload = { documentId: job.payload.documentId, format: 'PDF' };
-        break;
-
-      case JobType.EXPORT:
-        if (!isExportPayload(job.payload)) {
-          throw new Error(`Invalid payload for EXPORT job: ${JSON.stringify(job.payload)}`);
-        }
-        result = { ...result, ...(await processEXPORT(job)) };
-        break;
-
-      default:
-        throw new Error(`Unsupported job type: ${job.type}`);
-    }
-
-    // Calculate metrics
-    const completedAt = new Date();
-    const durationMs = completedAt.getTime() - startTime.getTime();
-    
-    // Enqueue next job in the pipeline if needed
-    if (nextJobType) {
-      const existingJob = await prisma.job.findFirst({
-        where: { 
-          type: nextJobType, 
-          documentId: job.documentId,
-          status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] } 
-        }
-      });
-
-      if (!existingJob) {
-        await prisma.job.create({
-          data: {
-            type: nextJobType,
-            payload: nextJobPayload,
-            documentId: job.documentId,
-            priority: 5,
-            maxAttempts: MAX_ATTEMPTS
-          }
-        });
-      }
-    }
-
-    // Update job with result
+    // Mark job as completed
     await prisma.job.update({
       where: { id: job.id },
       data: { 
         status: JobStatus.DONE,
-        result: {
-          ...result,
-          metrics: {
-            ...result.metrics,
-            completedAt: completedAt.toISOString(),
-            durationMs
+        finishedAt: new Date(),
+        metrics: {
+          update: {
+            status: 'DONE',
+            finishedAt: new Date().toISOString(),
+            durationMs: new Date().getTime() - startTime.getTime()
           }
-        },
-        finishedAt: completedAt,
-        error: null
+        }
       }
     });
 
-  } catch (err: any) {
-    error = err;
-    console.error(`Error processing job ${job.id}:`, err);
+    console.log(`Job ${job.id} (${job.type}) completed successfully`);
+  } catch (error) {
+    console.error(`Error processing job ${job.id} (${job.type}):`, error);
     
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const nextAttempt = (job.attempts || 0) + 1;
-    const isFinalAttempt = nextAttempt >= (job.maxAttempts || MAX_ATTEMPTS);
+    const shouldRetry = nextAttempt < MAX_ATTEMPTS;
     
+    // Update job with error and retry info
     await prisma.job.update({
       where: { id: job.id },
-      data: { 
-        status: isFinalAttempt ? JobStatus.ERROR : JobStatus.QUEUED,
-        lastError: err.message,
-        ...(!isFinalAttempt && {
-          scheduledAt: new Date(Date.now() + getRetryDelay(nextAttempt))
-        })
+      data: {
+        status: JobStatus.ERROR,
+        lastError: errorMessage,
+        scheduledAt: shouldRetry 
+          ? new Date(Date.now() + getRetryDelay(nextAttempt))
+          : undefined,
+        metrics: {
+          update: {
+            status: 'ERROR',
+            error: errorMessage,
+            finishedAt: new Date().toISOString(),
+            durationMs: new Date().getTime() - startTime.getTime(),
+            retryCount: nextAttempt
+          }
+        }
       }
     });
-  } finally {
-    activeJobs.delete(job.id);
+    
+    if (shouldRetry) {
+      console.log(`Scheduled retry ${nextAttempt}/${MAX_ATTEMPTS} for job ${job.id} in ${getRetryDelay(nextAttempt)}ms`);
+    } else {
+      console.error(`Job ${job.id} failed after ${MAX_ATTEMPTS} attempts`);
+    }
+    
+    throw error; // Re-throw to be caught by the worker loop
   }
-
-  return { result, error };
 }
 
 // Get next job from the queue with SKIP LOCKED
 async function getNextJob(): Promise<(Job & { payload: any }) | null> {
   return await prisma.$transaction(async (tx) => {
-    // Use raw query for SKIP LOCKED support
-    const [job] = await tx.$queryRaw<Job[]>`
-      SELECT * FROM "Job"
-      WHERE status = 'QUEUED' 
-      AND ("scheduledAt" IS NULL OR "scheduledAt" <= NOW())
-      ORDER BY priority DESC, "createdAt" ASC
-      LIMIT 1
-      FOR UPDATE SKIP LOCKED
-    `;
-
-    if (!job) return null;
-
-    // Update status to processing
-    return await tx.job.update({
-      where: { id: job.id },
-      data: { 
-        status: JobStatus.PROCESSING,
-        startedAt: new Date()
-      }
+    const job = await tx.job.findFirst({
+      where: {
+        status: JobStatus.QUEUED,
+        OR: [
+          { scheduledAt: null },
+          { scheduledAt: { lte: new Date() } }
+        ]
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' }
+      ],
+      // skipLocked is handled by the transaction options
     });
+    
+    if (!job) return null;
+    
+    // Mark job as processing
+    await tx.job.update({
+      where: { id: job.id },
+      data: { status: JobStatus.PROCESSING }
+    });
+    
+    return job;
+  }, {
+    isolationLevel: 'ReadCommitted',
+    maxWait: 5000,
+    timeout: 10000
   });
 }
 
 // Process jobs with concurrency control
 async function processJobs() {
-  try {
-    // Process jobs up to concurrency limit
-    while (activeJobs.size < CONCURRENCY) {
+  while (!process.shuttingDown) {
+    try {
+      // Check if we can process more jobs
+      if (activeJobs.size >= CONCURRENCY) {
+        await sleep(100);
+        continue;
+      }
+      
+      // Get next job
       const job = await getNextJob();
-      if (!job) break;
-
+      if (!job) {
+        await sleep(POLL_INTERVAL);
+        continue;
+      }
+      
+      // Process job in background
       activeJobs.add(job.id);
-      processJob(job).catch(console.error);
-    }
-  } catch (err) {
-    console.error('Error in worker loop:', err);
-  } finally {
-    // Schedule next poll if not shutting down
-    if (!process.shuttingDown) {
-      setTimeout(processJobs, POLL_INTERVAL);
+      processJob(job)
+        .catch(console.error)
+        .finally(() => activeJobs.delete(job.id));
+      
+    } catch (error) {
+      console.error('Error in worker loop:', error);
+      await sleep(1000); // Prevent tight loop on errors
     }
   }
 }
@@ -218,29 +184,22 @@ async function shutdown() {
   if (process.shuttingDown) return;
   process.shuttingDown = true;
   
-  console.log('Shutting down worker...');
+  console.log('Shutting down worker gracefully...');
   
-  // Wait for active jobs to complete (with timeout)
-  if (activeJobs.size > 0) {
+  // Wait for active jobs to complete
+  const startTime = Date.now();
+  const MAX_SHUTDOWN_TIME = 30000; // 30 seconds
+  
+  while (activeJobs.size > 0 && (Date.now() - startTime) < MAX_SHUTDOWN_TIME) {
     console.log(`Waiting for ${activeJobs.size} active jobs to complete...`);
-    
-    // Set a timeout to force exit if jobs take too long
-    const forceShutdown = setTimeout(() => {
-      console.warn('Force shutdown - jobs taking too long');
-      process.exit(1);
-    }, 30000); // 30 second timeout
-    
-    // Wait for active jobs to complete
-    while (activeJobs.size > 0) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    clearTimeout(forceShutdown);
+    await sleep(1000);
   }
   
-  // Close database connection
+  if (activeJobs.size > 0) {
+    console.warn(`Forcefully shutting down with ${activeJobs.size} active jobs`);
+  }
+  
   await prisma.$disconnect();
-  console.log('Worker shutdown complete');
   process.exit(0);
 }
 
@@ -249,8 +208,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 // Start the worker
-console.log(`Starting worker with concurrency: ${CONCURRENCY}`);
-processJobs().catch(err => {
-  console.error('Fatal error in worker:', err);
-  process.exit(1);
-});
+console.log('Starting worker with concurrency:', CONCURRENCY);
+processJobs().catch(console.error);

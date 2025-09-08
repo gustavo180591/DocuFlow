@@ -1,109 +1,145 @@
 <script lang="ts">
   import '../app.css';
-  import favicon from '$lib/assets/favicon.svg';
   import { onMount } from 'svelte';
-
+  import { browser } from '$app/environment';
+  import { systemConfig } from '$lib/services/system-config.service';
+  import Nav from '$lib/components/Nav.svelte';
+  import { toast } from 'svelte-sonner';
+  
   let mobileMenuOpen = false;
-
+  
+  // Apply theme from SystemConfig
+  function applyTheme(config: any) {
+    if (!browser || !config) return;
+    
+    const root = document.documentElement;
+    
+    // Apply brand colors
+    if (config.brand) {
+      root.style.setProperty('--brand-primary', config.brand.primaryRgb);
+      root.style.setProperty('--brand-secondary', config.brand.secondaryRgb);
+      root.style.setProperty('--brand-muted', config.brand.mutedRgb);
+    }
+    
+    // Apply border radius
+    if (config.borderRadius) {
+      root.style.setProperty('--border-radius', config.borderRadius);
+    }
+    
+    // Update document title
+    if (config.appName) {
+      document.title = config.appName;
+    }
+  }
+  
+  // Load theme preference from localStorage and SystemConfig
+  onMount(() => {
+    // Load system config
+    systemConfig.load()
+      .then(config => {
+        if (config) {
+          applyTheme(config);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load system config:', err);
+        toast.error('Error al cargar la configuración del sistema');
+      });
+    
+    // Apply saved theme
+    if (browser) {
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      // Watch for system theme changes
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e: MediaQueryListEvent) => {
+        if (!localStorage.getItem('theme')) {
+          if (e.matches) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      };
+      
+      mediaQuery.addEventListener('change', handleChange);
+      
+      return () => {
+        mediaQuery.removeEventListener('change', handleChange);
+      };
+    }
+  });
+  
   function toggleMobileMenu() {
     mobileMenuOpen = !mobileMenuOpen;
   }
 </script>
 
 <svelte:head>
-  <link rel="icon" href={favicon} />
+  <title>{$systemConfig?.appName || 'DocuFlow'}</title>
+  <meta name="description" content="Sistema de gestión de documentos y miembros" />
+  <meta name="theme-color" content={$systemConfig?.brand?.primaryColor || '#4f46e5'} />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.ico" />
+  
+  <!-- Preload system font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link 
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" 
+    rel="stylesheet"
+  />
+  
+  <!-- iOS PWA support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content={$systemConfig?.appName || 'DocuFlow'} />
+  
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json" />
 </svelte:head>
 
-<nav class="bg-indigo-600">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="flex items-center justify-between h-16">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <span class="text-white font-bold text-xl">DocuFlow</span>
-        </div>
-        <div class="hidden md:block">
-          <div class="ml-10 flex items-baseline space-x-4">
-            <a href="/" class="bg-indigo-700 text-white px-3 py-2 rounded-md text-sm font-medium">Inicio</a>
-            <a href="/instituciones" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Instituciones</a>
-            <a href="/socios" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Socios</a>
-            <a href="/documentos" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Documentos</a>
-            <a href="/reportes" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 px-3 py-2 rounded-md text-sm font-medium">Reportes</a>
-          </div>
-        </div>
-      </div>
-      <div class="hidden md:block">
-        <div class="ml-4 flex items-center md:ml-6">
-          <button class="p-1 rounded-full text-indigo-200 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-600 focus:ring-white">
-            <span class="sr-only">Ver notificaciones</span>
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </button>
-          <div class="ml-3 relative">
-            <div>
-              <button class="max-w-xs bg-indigo-600 rounded-full flex items-center text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-600 focus:ring-white" id="user-menu" aria-expanded="false" aria-haspopup="true">
-                <span class="sr-only">Abrir menú de usuario</span>
-                <div class="h-8 w-8 rounded-full bg-indigo-400 flex items-center justify-center text-white font-medium">
-                  US
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="-mr-2 flex md:hidden">
-        <button 
-          type="button" 
-          class="bg-indigo-600 inline-flex items-center justify-center p-2 rounded-md text-indigo-200 hover:text-white hover:bg-indigo-500 hover:bg-opacity-75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-600 focus:ring-white" 
-          aria-controls="mobile-menu" 
-          aria-expanded={mobileMenuOpen}
-          on:click={toggleMobileMenu}
-        >
-          <span class="sr-only">Abrir menú principal</span>
-          <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  </div>
+<!-- Main Navigation -->
+<Nav bind:mobileMenuOpen />
 
-  <!-- Mobile menu, show/hide based on menu state. -->
-  <div class="md:hidden {mobileMenuOpen ? 'block' : 'hidden'}" id="mobile-menu">
-    <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-      <a href="/" class="bg-indigo-700 text-white block px-3 py-2 rounded-md text-base font-medium">Inicio</a>
-      <a href="/instituciones" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Instituciones</a>
-      <a href="/socios" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Socios</a>
-      <a href="/documentos" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Documentos</a>
-      <a href="/reports" class="text-white hover:bg-indigo-500 hover:bg-opacity-75 block px-3 py-2 rounded-md text-base font-medium">Reportes</a>
-    </div>
-    <div class="pt-4 pb-3 border-t border-indigo-700">
-      <div class="flex items-center px-5">
-        <div class="flex-shrink-0">
-          <div class="h-10 w-10 rounded-full bg-indigo-400 flex items-center justify-center text-white font-medium">
-            US
-          </div>
-        </div>
-        <div class="ml-3">
-          <div class="text-base font-medium text-white">Usuario</div>
-          <div class="text-sm font-medium text-indigo-300">usuario@ejemplo.com</div>
-        </div>
-        <button class="ml-auto bg-indigo-600 flex-shrink-0 p-1 rounded-full text-indigo-200 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-600 focus:ring-white">
-          <span class="sr-only">Ver notificaciones</span>
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-        </button>
-      </div>
-      <div class="mt-3 px-2 space-y-1">
-        <a href="/perfil" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Tu perfil</a>
-        <a href="/configuracion" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Configuración</a>
-        <a href="/auth/signout" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-indigo-500 hover:bg-opacity-75">Cerrar sesión</a>
-      </div>
-    </div>
+<main class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <slot />
   </div>
-</nav>
-
-<main class="min-h-screen bg-gray-50">
-  <slot />
+  
+  <!-- Toast notifications -->
+  <div id="toast" />
+  
+  <!-- Global loading indicator -->
+  <div id="loading-bar" class="fixed top-0 left-0 right-0 h-1 bg-primary opacity-0 transition-opacity duration-200"></div>
 </main>
+
+<footer class="bg-white dark:bg-gray-800 shadow-inner mt-12">
+  <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row justify-between items-center">
+      <div class="text-center md:text-left mb-4 md:mb-0">
+        <p class="text-gray-600 dark:text-gray-300 text-sm">
+          &copy; {new Date().getFullYear()} {$systemConfig?.appName || 'DocuFlow'}. Todos los derechos reservados.
+        </p>
+      </div>
+      <div class="flex space-x-6">
+        <a href="/terminos" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">
+          Términos y condiciones
+        </a>
+        <a href="/privacidad" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">
+          Política de privacidad
+        </a>
+        <a href="/contacto" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">
+          Contacto
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>

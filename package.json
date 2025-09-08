@@ -3,6 +3,9 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -20,24 +23,23 @@
 		"worker": "tsx scripts/worker.ts",
 		"worker:dev": "tsx watch scripts/worker.ts",
 		"worker:test": "vitest run tests/worker.test.ts",
-		"test:smoke": "HOST=http://localhost:5173 vitest run tests/smoke.test.ts"
+		"test:smoke": "HOST=http://localhost:5173 vitest run tests/smoke.test.ts",
+		"db:seed": "node prisma/seed.js"
 	},
 	"devDependencies": {
-		"@sveltejs/kit": "1.30.4",
-		"@sveltejs/adapter-auto": "2.1.1",
-		"@sveltejs/vite-plugin-svelte": "2.5.3",
-		"vite": "4.5.2",
-		"vitest": "0.34.6",
-		"@vitest/ui": "0.34.6",
-		"@vitest/coverage-v8": "0.34.6",
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^8.56.0",
+		"@sveltejs/adapter-auto": "2.1.1",
+		"@sveltejs/kit": "1.30.4",
+		"@sveltejs/vite-plugin-svelte": "2.5.3",
 		"@tailwindcss/forms": "^0.5.10",
 		"@tailwindcss/postcss": "4.1.12",
 		"@tailwindcss/typography": "^0.5.16",
 		"@testing-library/jest-dom": "^6.8.0",
 		"@testing-library/svelte": "^5.2.8",
-		"@types/node": "^20.11.0",
+		"@types/node": "^20.19.13",
+		"@vitest/coverage-v8": "0.34.6",
+		"@vitest/ui": "0.34.6",
 		"autoprefixer": "^10.4.21",
 		"eslint": "^8.56.0",
 		"eslint-config-prettier": "^9.1.0",
@@ -50,8 +52,11 @@
 		"svelte": "^4.2.12",
 		"svelte-check": "^3.7.3",
 		"tailwindcss": "^3.4.3",
+		"ts-node": "^10.9.2",
 		"tsx": "^4.7.1",
-		"typescript": "^5.3.3"
+		"typescript": "^5.9.2",
+		"vite": "4.5.2",
+		"vitest": "0.34.6"
 	},
 	"dependencies": {
 		"@auth/prisma-adapter": "^2.10.0",
@@ -61,6 +66,7 @@
 		"bcryptjs": "^3.0.2",
 		"pdfjs-dist": "^5.4.54",
 		"prisma": "^6.13.0",
+		"svelte-sonner": "^1.0.5",
 		"tesseract.js": "^6.0.1",
 		"zod": "^4.1.5"
 	}

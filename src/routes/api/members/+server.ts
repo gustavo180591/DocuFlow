@@ -1,181 +1,102 @@
-import { json, error as httpError } from '@sveltejs/kit';
-import { prisma } from '$lib/server/prisma';
-import { memberSchema } from '$lib/validation/member';
-import type { MemberStatus } from '@prisma/client';
 import type { RequestHandler } from './$types';
+import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 
-type MemberWhereInput = {
-  OR?: Array<{
-    firstName?: { contains: string; mode?: 'insensitive' };
-    lastName?: { contains: string; mode?: 'insensitive' };
-    dni?: { contains: string };
-    email?: { contains: string; mode?: 'insensitive' };
-  }>;
-  institutionId?: string;
-  status?: MemberStatus;
-};
+const prisma = new PrismaClient();
+
+// Define MemberStatus enum to avoid type import issues
+enum MemberStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  PENDING = 'PENDING'
+}
+
+const Query = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  q: z.string().trim().optional(),
+  status: z.nativeEnum(MemberStatus).optional(),
+  institutionId: z.string().trim().optional(),
+  sort: z.enum(['apellido', 'nombre', 'dni', 'joinedAt']).default('apellido'),
+  dir: z.enum(['asc', 'desc']).default('asc')
+});
 
 export const GET: RequestHandler = async ({ url }) => {
+  const parsed = Query.safeParse({
+    page: url.searchParams.get('page'),
+    pageSize: url.searchParams.get('pageSize'),
+    q: url.searchParams.get('q') ?? undefined,
+    status: url.searchParams.get('status') ?? undefined,
+    institutionId: url.searchParams.get('institutionId') ?? undefined,
+    sort: url.searchParams.get('sort') ?? undefined,
+    dir: url.searchParams.get('dir') ?? undefined
+  });
+
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ message: 'Invalid query', issues: parsed.error.flatten() }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' }
+    });
+  }
+
+  const { page, pageSize, q, status, institutionId, sort, dir } = parsed.data;
+  const skip = (page - 1) * pageSize;
+
+  const where: any = {};
+  if (status) where.status = status;
+  if (institutionId) where.institutionId = institutionId;
+  if (q) {
+    where.OR = [
+      { dni: { contains: q } },
+      { nombre: { contains: q, mode: 'insensitive' } },
+      { apellido: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } }
+    ];
+  }
+
   try {
-    // Pagination
-    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
-    const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('pageSize') || '20')));
-    const search = url.searchParams.get('search')?.trim() || '';
-    const institutionId = url.searchParams.get('institutionId');
-    const status = url.searchParams.get('status');
-
-    const where: MemberWhereInput = {};
-    
-    // Search functionality
-    if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' as const } },
-        { lastName: { contains: search, mode: 'insensitive' as const } },
-        { dni: { contains: search } },
-        { email: { contains: search, mode: 'insensitive' as const } }
-      ];
-    }
-    
-    // Filters
-    if (institutionId) {
-      where.institutionId = institutionId;
-    }
-    
-    if (status) {
-      // Use type assertion to ensure type safety with Prisma's generated types
-      where.status = status as MemberStatus;
-    }
-
-    const [items, total] = await Promise.all([
+    const [total, data] = await Promise.all([
+      prisma.member.count({ where }),
       prisma.member.findMany({
         where,
-        skip: (page - 1) * pageSize,
+        skip,
         take: pageSize,
+        orderBy: { [sort]: dir },
         include: {
-          institution: {
-            select: {
-              id: true,
-              name: true,
-              cuit: true
-            }
-          }
-        },
-        orderBy: [
-          { lastName: 'asc' },
-          { firstName: 'asc' }
-        ]
-      }),
-      prisma.member.count({ where })
-    ]);
-    
-    return json({
-      items,
-      pagination: {
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize)
-      }
-    });
-  } catch (err) {
-    console.error('Error fetching members:', err);
-    throw httpError(500, 'Error fetching members');
-  }
-};
-
-export const POST: RequestHandler = async ({ request }) => {
-  try {
-    const rawData = await request.json();
-    
-    // Validate input with Zod
-    const result = memberSchema.safeParse(rawData);
-    
-    if (!result.success) {
-      return new Response(
-        JSON.stringify({
-          message: 'Validation error',
-          errors: result.error.flatten()
-        }),
-        { status: 400 }
-      );
-    }
-    
-    const data = result.data;
-
-    // Check if member with same DNI exists
-    const existingMember = await prisma.member.findUnique({
-      where: { dni: data.dni }
-    });
-
-    if (existingMember) {
-      return new Response(
-        JSON.stringify({
-          message: 'Validation error',
-          errors: {
-            formErrors: [],
-            fieldErrors: {
-              dni: ['A member with this DNI already exists']
-            }
-          }
-        }),
-        { status: 409 }
-      );
-    }
-
-    // Check if institution exists
-    const institution = await prisma.institution.findUnique({
-      where: { id: data.institutionId }
-    });
-
-    if (!institution) {
-      return new Response(
-        JSON.stringify({
-          message: 'Validation error',
-          errors: {
-            formErrors: [],
-            fieldErrors: {
-              institutionId: ['Institution not found']
-            }
-          }
-        }),
-        { status: 404 }
-      );
-    }
-
-    const member = await prisma.member.create({
-      data: {
-        dni: data.dni,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email || null,
-        phone: data.phone || null,
-        address: data.address || null,
-        birthDate: data.birthDate ? new Date(data.birthDate) : null,
-        nationality: data.nationality || null,
-        status: data.status || 'PENDING_VERIFICATION',
-        joinedAt: data.joinedAt ? new Date(data.joinedAt) : new Date(),
-        institutionId: data.institutionId
-      },
-      include: {
-        institution: {
-          select: {
-            id: true,
-            name: true,
-            cuit: true
+          institution: { 
+            select: { 
+              id: true, 
+              name: true, 
+              cuit: true 
+            } 
           }
         }
-      }
-    });
+      })
+    ]);
 
-    return json(member, { status: 201 });
+    return new Response(
+      JSON.stringify({
+        data,
+        meta: { 
+          total, 
+          page, 
+          pageSize, 
+          totalPages: Math.ceil(total / pageSize) 
+        }
+      }),
+      { 
+        status: 200,
+        headers: { 'content-type': 'application/json' } 
+      }
+    );
   } catch (err) {
-    console.error('Error creating member:', err);
-    
-    if (err && typeof err === 'object' && 'status' in err && 
-        (err.status === 400 || err.status === 404 || err.status === 409)) {
-      throw err;
-    }
-    
-    throw httpError(500, 'Error creating member');
+    console.error('Error fetching members:', err);
+    return new Response(
+      JSON.stringify({ message: 'Error fetching members' }),
+      { 
+        status: 500,
+        headers: { 'content-type': 'application/json' } 
+      }
+    );
   }
 };

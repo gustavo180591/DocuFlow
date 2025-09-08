@@ -45,10 +45,41 @@ describe('Smoke Tests', () => {
     }
   });
 
-  // Skipping members test as the endpoint is not fully implemented yet
-  it.skip('should return members list', async () => {
-    // This test is skipped until the members endpoint is properly implemented
-    // Current issue: The endpoint returns 500 due to incorrect field name in orderBy
-    // Expected field name: 'apellido', but got 'lastName'
+  it('should return members list', async () => {
+    const response = await fetch(`${HOST}${API_ROUTES.MEMBERS}?page=1&pageSize=10`);
+    const data = await response.json();
+    
+    if (response.status !== 200) {
+      console.error('Error response:', data);
+    }
+    
+    expect(response.status).toBe(200);
+    expect(data).toHaveProperty('data');
+    expect(data).toHaveProperty('meta');
+    expect(Array.isArray(data.data)).toBe(true);
+    
+    // Check pagination metadata
+    expect(data.meta).toMatchObject({
+      total: expect.any(Number),
+      page: expect.any(Number),
+      pageSize: expect.any(Number),
+      totalPages: expect.any(Number)
+    });
+    
+    // If there are members, check their structure
+    if (data.data.length > 0) {
+      const member = data.data[0];
+      expect(member).toMatchObject({
+        id: expect.any(String),
+        nombre: expect.any(String),
+        apellido: expect.any(String),
+        dni: expect.any(String),
+        email: expect.any(String),
+        status: expect.stringMatching(/^(ACTIVE|INACTIVE|PENDING)$/),
+        institutionId: expect.any(String)
+      });
+    } else {
+      console.log('No members found in the database');
+    }
   });
 });

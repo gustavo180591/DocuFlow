@@ -199,6 +199,18 @@ model MemberDue {
   @@index([paid])
 }
 
+model SystemConfig {
+  id              String   @id @default(cuid())
+  appName         String   @default("DocuFlow")
+  logoUrl         String   @default("/logo.svg")
+  brand           Json     @default("{\"primaryRgb\":\"79 70 229\",\"secondaryRgb\":\"99 102 241\",\"mutedRgb\":\"99 102 120\"}")
+  locale          String   @default("es")
+  features        Json     @default("{\"reports\":true,\"documents\":true}")
+  borderRadius    String?  @default("0.5rem")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Link {
   id         String   @id @default(cuid())
   documentId String
@@ -234,16 +246,6 @@ model AuditLog {
   @@index([createdAt])
 }
 
-model SystemConfig {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       String
-  description String?
-  isPublic    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
 enum JobType {
   OCR
   PARSING
@@ -257,6 +259,7 @@ enum JobStatus {
   DONE
   ERROR
 }
+
 
 enum MemberStatus {
   ACTIVE
