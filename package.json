@@ -23,7 +23,7 @@
 		"test:smoke": "HOST=http://localhost:5173 vitest run tests/smoke.test.ts"
 	},
 	"devDependencies": {
-		"@sveltejs/kit": "1.30.4",
+		"@sveltejs/kit": "2.37.1",
 		"@sveltejs/adapter-auto": "2.1.1",
 		"@sveltejs/vite-plugin-svelte": "2.5.3",
 		"vite": "4.5.2",
