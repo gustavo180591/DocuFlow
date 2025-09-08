@@ -33,28 +33,104 @@ export const validateEmail = (email: string): string | null => {
 };
 
 // Common form interfaces
-export interface FormErrors {
-  [key: string]: string | null;
+export type FormErrors<T> = Partial<Record<keyof T, string>>;
+
+type ValidationRule<T> = (value: unknown, formData: T) => string | null;
+type ValidationRules<T> = Partial<Record<keyof T, ValidationRule<T>>>;
+
+// Base form data types
+export interface BaseInstitutionFormData {
+  name: string;
+  cuit: string;
+  email: string;
+  address: string;
 }
 
-export type ValidationRule<T> = (value: unknown, formData: T) => string | null;
-
-export interface ValidationRules<T> {
-  [key: string]: ValidationRule<T>;
+export interface Institution {
+  id: string;
+  name: string;
+  cuit: string;
+  email: string | null;
+  address: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
+export type InstitutionFormData = Omit<BaseInstitutionFormData, 'email' | 'address'> & {
+  email: string;
+  address: string;
+};
+
+export interface MemberFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  institutionId: string;
+}
+
+// Form validation rules
+export function createInstitutionValidator() {
+  return (formData: BaseInstitutionFormData): FormErrors<BaseInstitutionFormData> => {
+    const errors: FormErrors<BaseInstitutionFormData> = {};
+    
+    if (!formData.name?.trim()) {
+      errors.name = 'El nombre es requerido';
+    }
+    
+    if (!formData.cuit?.trim()) {
+      errors.cuit = 'El CUIT es requerido';
+    } else if (!isValidCUIT(formData.cuit)) {
+      errors.cuit = 'Formato de CUIT inválido (ej: 30-12345678-9)';
+    }
+    
+    if (formData.email && !isValidEmail(formData.email)) {
+      errors.email = 'Email inválido';
+    }
+    
+    return errors;
+  };
+}
+
+export function createMemberValidator() {
+  return (formData: MemberFormData): FormErrors<MemberFormData> => {
+    const errors: FormErrors<MemberFormData> = {};
+    
+    if (!formData.firstName?.trim()) {
+      errors.firstName = 'El nombre es requerido';
+    }
+    
+    if (!formData.lastName?.trim()) {
+      errors.lastName = 'El apellido es requerido';
+    }
+    
+    if (formData.email && !isValidEmail(formData.email)) {
+      errors.email = 'Email inválido';
+    }
+    
+    if (!formData.institutionId) {
+      errors.institutionId = 'La institución es requerida';
+    }
+    
+    return errors;
+  };
+}
+
+// Generic form validation
 export function validateForm<T extends Record<string, unknown>>(
   formData: T,
   rules: ValidationRules<T>
-): FormErrors {
-  const errors: FormErrors = {};
+): FormErrors<T> {
+  const errors: FormErrors<T> = {};
   
-  for (const [field, validator] of Object.entries(rules)) {
-    const error = validator(formData[field], formData);
-    if (error) {
-      errors[field] = error;
+  (Object.entries(rules) as [keyof T, ValidationRule<T> | undefined][]).forEach(([field, validator]) => {
+    if (validator) {
+      const error = validator(formData[field], formData);
+      if (error) {
+        errors[field] = error;
+      }
     }
-  }
+  });
   
   return errors;
 }

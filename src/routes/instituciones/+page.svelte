@@ -1,303 +1,229 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import { fade, scale } from 'svelte/transition';
+  import { getErrorMessage, withErrorHandling } from '$lib/utils/errorHandling';
+  import { formatDate, type Institution, type BaseInstitutionFormData } from '$lib/utils/validation';
+  import Modal from '$lib/components/Modal.svelte';
+  import { createInstitutionValidator } from '$lib/utils/validation';
   import type { PageData } from './$types';
+  import { goto } from '$app/navigation';
+  import { enhance } from '$app/forms';
 
-  // Page data from load function
-  export let data: PageData & {
-    institutions?: Institution[];
-    meta?: { total: number };
-  };
+  // Page data
+  export let data: PageData;
   
-  // Types
-  interface Institution {
-    id?: string;
-    name: string;
-    cuit: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-    isActive: boolean;
-  }
-  
-  type FormData = {
-    name: string;
-    cuit: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-    isActive: boolean;
-  };
-  
-  type FormErrors = Partial<Record<keyof FormData, string>>;
-
   // State
-  let institutions: Institution[] = data.institutions || [];
-  let loading = !data.institutions;
-  let error: string | null = null;
-  let showModal = false;
-  let formData: FormData = {
+  let showDeleteModal = false;
+  let showEditModal = false;
+  let isSubmitting = false;
+  let formErrors: Record<string, string> = {};
+  
+  // Form data
+  let formData: BaseInstitutionFormData = {
     name: '',
     cuit: '',
-    address: '',
-    phone: '',
     email: '',
-    website: '',
-    isActive: true
+    address: ''
   };
-  let formErrors: FormErrors = {};
-  let isSubmitting = false;
-  let searchTerm = '';
-  let currentPage = 1;
-  const itemsPerPage = 10;
-  let totalItems = data.meta?.total || 0;
   
-  // Helper function to safely get error message
-  function getErrorMessage(err: unknown): string {
-    return typeof err === 'object' && err && 'message' in err 
-      ? String((err as any).message) 
-      : 'Error inesperado';
+  // Current institution being edited/deleted
+  let currentInstitution: Institution | null = null;
+  
+  // Pagination
+  const pageSize = 10;
+  const currentPage = $page.url.searchParams.get('page') 
+    ? parseInt($page.url.searchParams.get('page') || '1')
+    : 1;
+  
+  // Computed values
+  const totalPages = Math.ceil(data.meta.total / pageSize);
+  const hasPreviousPage = currentPage > 1;
+  const hasNextPage = currentPage < totalPages;
+  
+  // Initialize form with data if editing
+  function editInstitution(institution: typeof currentInstitution) {
+    if (!institution) return;
+    
+    currentInstitution = institution;
+    formData = {
+      name: institution.name,
+      cuit: institution.cuit,
+      email: institution.email || '',
+      address: institution.address || ''
+    };
+    showEditModal = true;
   }
-
-  async function fetchInstitutions() {
-    try {
-      loading = true;
-      error = null;
+  
+  // Handle form submission with enhanced form handling
+  async function handleSubmit() {
+    return withErrorHandling(async () => {
+      isSubmitting = true;
+      formErrors = {};
       
-      const params = new URLSearchParams({
-        search: searchTerm,
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString()
-      });
+      const validator = createInstitutionValidator();
+      const errors = validator(formData);
       
-      const response = await fetch(`/api/institutions?${params}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al cargar las instituciones');
+      if (Object.keys(errors).length > 0) {
+        formErrors = errors;
+        isSubmitting = false;
+        return;
       }
       
-      const result = await response.json();
-      institutions = result.data || [];
-      totalItems = result.meta?.total || 0;
-    } catch (err) {
-      console.error('Error:', err);
-      error = getErrorMessage(err);
-    } finally {
-      loading = false;
-    }
-  };
-
-  function handleSearch(e: Event) {
-    e?.preventDefault();
-    currentPage = 1;
-    fetchInstitutions();
-  }
-
-  function handlePageChange(page: number) {
-    currentPage = page;
-    fetchInstitutions();
-  }
-
-  function openModal() {
-    formData = {
-      name: '',
-      cuit: '',
-      address: '',
-      phone: '',
-      email: '',
-      website: '',
-      isActive: true
-    };
-    formErrors = {};
-    showModal = true;
-  }
-
-  function closeModal() {
-    showModal = false;
-  }
-
-  function validateForm(): boolean {
-    const errors: FormErrors = {};
-
-    if (!formData.name.trim()) {
-      errors.name = 'El nombre es requerido';
-    }
-
-    if (!formData.cuit.trim()) {
-      errors.cuit = 'El CUIT es requerido';
-    } else if (!/^\d{2}-\d{8}-\d$/.test(formData.cuit)) {
-      errors.cuit = 'Formato de CUIT inválido (ej: 30-12345678-9)';
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Email inválido';
-    }
-
-    formErrors = errors;
-    return Object.keys(errors).length === 0;
-  }
-
-  async function handleSubmit() {
-    if (!validateForm()) return;
-
-    try {
-      isSubmitting = true;
-      const response = await fetch('/api/institutions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const url = currentInstitution 
+        ? `/api/institutions/${currentInstitution.id}`
+        : '/api/institutions';
+      
+      const method = currentInstitution ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al guardar la institución');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Error al guardar la institución');
       }
-
-      closeModal();
-      await fetchInstitutions();
-    } catch (err) {
-      console.error('Error:', err);
-      error = getErrorMessage(err);
-    } finally {
+      
+      // Close modal and refresh data
+      showEditModal = false;
+      window.location.reload();
+    }, (error) => {
+      formErrors._form = getErrorMessage(error);
       isSubmitting = false;
-    }
-  };
-
-  onMount(() => {
-    if (!data.institutions) {
-      fetchInstitutions();
-    }
-  });
+    });
+  }
+  
+  // Handle delete with error handling
+  async function handleDelete() {
+    if (!currentInstitution) return;
+    
+    return withErrorHandling(async () => {
+      const response = await fetch(`/api/institutions/${currentInstitution!.id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al eliminar la institución');
+      }
+      
+      // Close modal and refresh data
+      showDeleteModal = false;
+      window.location.reload();
+    }, (error) => {
+      formErrors._form = getErrorMessage(error);
+      showDeleteModal = false;
+    });
+  }
+  
+  // Pagination helpers
+  function goToPage(page: number) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', page.toString());
+    goto(url.toString());
+  }
 </script>
 
 <div class="container mx-auto px-4 py-8">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold text-gray-800">Instituciones</h1>
-    <button 
-      on:click={openModal}
-      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-2xl font-bold text-gray-900">Instituciones</h1>
+    <button
+      on:click={() => {
+        currentInstitution = null;
+        formData = { name: '', cuit: '', email: '', address: '' };
+        showEditModal = true;
+      }}
+      class="btn-primary"
     >
       Nueva Institución
     </button>
   </div>
-
-  <!-- Search and Filter -->
-  <div class="mb-6">
-    <form on:submit|preventDefault={handleSearch} class="flex gap-2">
-      <input
-        type="text"
-        bind:value={searchTerm}
-        placeholder="Buscar instituciones..."
-        class="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <button 
-        type="submit"
-        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
-      >
-        Buscar
-      </button>
-    </form>
-  </div>
-
-  {#if loading}
-    <div class="text-center py-8">
-      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-      <p class="mt-2 text-gray-600">Cargando instituciones...</p>
-    </div>
-  {:else if error}
-    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
-      <p class="font-bold">Error</p>
-      <p>{error}</p>
-    </div>
-  {:else if institutions.length === 0}
-    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-      <div class="flex">
-        <div class="flex-shrink-0">
-          <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-          </svg>
-        </div>
-        <div class="ml-3">
-          <p class="text-sm text-yellow-700">
-            No se encontraron instituciones. Crea una nueva institución para comenzar.
-          </p>
-        </div>
-      </div>
+  
+  {#if data.institutions.length === 0}
+    <div class="text-center py-12">
+      <p class="text-gray-500">No hay instituciones registradas</p>
     </div>
   {:else}
-    <!-- Institutions Table -->
     <div class="bg-white shadow overflow-hidden sm:rounded-lg">
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nombre
-              </th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                CUIT
-              </th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
-              </th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th scope="col" class="relative px-6 py-3">
-                <span class="sr-only">Acciones</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            {#each institutions as institution (institution.id)}
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center">
-                    <div class="text-sm font-medium text-gray-900">
-                      {institution.name}
-                    </div>
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Nombre
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              CUIT
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Email
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Fecha de Registro
+            </th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Acciones
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {#each data.institutions as institution (institution.id)}
+            <tr class="hover:bg-gray-50" in:fade={{ duration: 150 }}>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">
+                  {institution.name}
+                </div>
+                {#if institution.address}
+                  <div class="text-sm text-gray-500">
+                    {institution.address}
                   </div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {institution.cuit}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {institution.email || '-'}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {institution.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
-                    {institution.isActive ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href={`/instituciones/${institution.id}`} class="text-blue-600 hover:text-blue-900 mr-3">Editar</a>
-                  <button class="text-red-600 hover:text-red-900">Eliminar</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      {#if totalItems > itemsPerPage}
+                {/if}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {institution.cuit}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {institution.email || '-'}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatDate(institution.createdAt)}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  on:click={() => editInstitution(institution)}
+                  class="text-indigo-600 hover:text-indigo-900 mr-4"
+                >
+                  Editar
+                </button>
+                <button
+                  on:click={() => {
+                    currentInstitution = institution;
+                    showDeleteModal = true;
+                  }}
+                  class="text-red-600 hover:text-red-900"
+                >
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      
+      {#if totalPages > 1}
         <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
           <div class="flex-1 flex justify-between sm:hidden">
-            <button 
-              on:click={() => currentPage < Math.ceil(totalItems / itemsPerPage) && handlePageChange(currentPage + 1)}
-              disabled={currentPage === 1}
-              class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            <button
+              on:click={() => goToPage(currentPage - 1)}
+              disabled={!hasPreviousPage}
+              class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md {hasPreviousPage ? 'text-gray-700 bg-white hover:bg-gray-50' : 'text-gray-400 bg-gray-100 cursor-not-allowed'}"
             >
               Anterior
             </button>
-            <button 
-              on:click={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            <button
+              on:click={() => goToPage(currentPage + 1)}
+              disabled={!hasNextPage}
+              class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md {hasNextPage ? 'text-gray-700 bg-white hover:bg-gray-50' : 'text-gray-400 bg-gray-100 cursor-not-allowed'}"
             >
               Siguiente
             </button>
@@ -305,35 +231,44 @@
           <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
               <p class="text-sm text-gray-700">
-                Mostrando <span class="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a <span class="font-medium">
-                  {Math.min(currentPage * itemsPerPage, totalItems)}
-                </span> de <span class="font-medium">{totalItems}</span> resultados
+                Mostrando <span class="font-medium">{(currentPage - 1) * pageSize + 1}</span> a
+                <span class="font-medium">
+                  {Math.min(currentPage * pageSize, data.meta.total)}
+                </span> de <span class="font-medium">{data.meta.total}</span> resultados
               </p>
             </div>
             <div>
               <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 <button
-                  on:click={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  on:click={() => goToPage(currentPage - 1)}
+                  disabled={!hasPreviousPage}
+                  class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium {hasPreviousPage ? 'text-gray-500 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}"
                 >
                   <span class="sr-only">Anterior</span>
                   <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
                 </button>
-                {#each Array.from({ length: Math.ceil(totalItems / itemsPerPage) }, (_, i) => i + 1) as pageNumber}
+                
+                {#each Array.from({ length: totalPages }, (_, i) => i + 1) as pageNum}
                   <button
-                    on:click={() => handlePageChange(pageNumber)}
-                    class="px-4 py-2 border-t-2 font-medium text-sm {pageNumber === currentPage ? 'text-blue-600 border-blue-500' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent'}"
+                    on:click={() => goToPage(pageNum)}
+                    class={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                      pageNum === currentPage
+                        ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }`}
                   >
-                    {pageNumber}
+                    {pageNum}
                   </button>
                 {/each}
+                
                 <button
-                  on:click={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
-                  class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  on:click={() => goToPage(currentPage + 1)}
+                  disabled={!hasNextPage}
+                  class={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 text-sm font-medium ${
+                    hasNextPage ? 'bg-white text-gray-500 hover:bg-gray-50' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                  }`}
                 >
                   <span class="sr-only">Siguiente</span>
                   <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -347,172 +282,121 @@
       {/if}
     </div>
   {/if}
+</div>
 
-  <!-- Create Institution Modal -->
-  {#if showModal}
-    <div 
-      class="fixed inset-0 overflow-y-auto z-50" 
-      role="dialog" 
-      aria-modal="true"
-      transition:fade={{ duration: 150 }}
-    >
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <!-- Background overlay -->
-        <div 
-          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-          on:click={closeModal}
-          on:keydown|self={(e) => e.key === 'Escape' && closeModal()}
-          role="button"
-          tabindex="0"
-          aria-label="Cerrar modal"
-          transition:fade={{ duration: 150 }}
-        ></div>
-
-        <!-- Modal panel -->
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        
-        <div 
-          class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-headline"
-          transition:scale={{ duration: 200 }}
-        >
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
-            <div class="sm:flex sm:items-start">
-              <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Nueva Institución
-                </h3>
-                
-                {#if error}
-                  <div class="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
-                    <p class="font-bold">Error</p>
-                    <p>{error}</p>
-                  </div>
-                {/if}
-
-                <div class="space-y-4">
-                  <div>
-                    <label for="name" class="block text-sm font-medium text-gray-700">Nombre *</label>
-                    <input
-                      type="text"
-                      id="name"
-                      bind:value={formData.name}
-                      class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.name}
-                      class:border-gray-300={!formErrors.name}
-                    />
-                    {#if formErrors.name}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.name}</p>
-                    {/if}
-                  </div>
-
-                  <div>
-                    <label for="cuit" class="block text-sm font-medium text-gray-700">CUIT *</label>
-                    <input
-                      type="text"
-                      id="cuit"
-                      bind:value={formData.cuit}
-                      placeholder="Ej: 30-12345678-9"
-                      class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.cuit}
-                      class:border-gray-300={!formErrors.cuit}
-                    />
-                    {#if formErrors.cuit}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.cuit}</p>
-                    {/if}
-                  </div>
-
-                  <div>
-                    <label for="address" class="block text-sm font-medium text-gray-700">Dirección</label>
-                    <input
-                      type="text"
-                      id="address"
-                      bind:value={formData.address}
-                      class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label for="phone" class="block text-sm font-medium text-gray-700">Teléfono</label>
-                    <input
-                      type="tel"
-                      id="phone"
-                      bind:value={formData.phone}
-                      class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-                    <input
-                      type="email"
-                      id="email"
-                      bind:value={formData.email}
-                      class="mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      class:border-red-300={!!formErrors.email}
-                      class:border-gray-300={!formErrors.email}
-                    />
-                    {#if formErrors.email}
-                      <p class="mt-1 text-sm text-red-600">{formErrors.email}</p>
-                    {/if}
-                  </div>
-
-                  <div>
-                    <label for="website" class="block text-sm font-medium text-gray-700">Sitio web</label>
-                    <input
-                      type="url"
-                      id="website"
-                      bind:value={formData.website}
-                      class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-
-                  <div class="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="isActive"
-                      bind:checked={formData.isActive}
-                      class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label for="isActive" class="ml-2 block text-sm text-gray-700">
-                      Activo
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
+<!-- Edit/Add Modal -->
+<Modal
+  isOpen={showEditModal}
+  title={currentInstitution ? 'Editar Institución' : 'Nueva Institución'}
+  onClose={() => showEditModal = false}
+  onSubmit={handleSubmit}
+  submitLoading={isSubmitting}
+  submitLabel={currentInstitution ? 'Guardar Cambios' : 'Crear Institución'}
+>
+  <div class="space-y-4">
+    {#if formErrors._form}
+      <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
           </div>
-          
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              on:click={handleSubmit}
-              disabled={isSubmitting}
-              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {#if isSubmitting}
-                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Guardando...
-              {:else}
-                Guardar
-              {/if}
-            </button>
-            <button
-              type="button"
-              on:click={closeModal}
-              disabled={isSubmitting}
-              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancelar
-            </button>
+          <div class="ml-3">
+            <p class="text-sm text-red-700">{formErrors._form}</p>
           </div>
+        </div>
+      </div>
+    {/if}
+    
+    <div>
+      <label for="name" class="block text-sm font-medium text-gray-700">Nombre *</label>
+      <input
+        type="text"
+        id="name"
+        bind:value={formData.name}
+        class={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
+          formErrors.name ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:outline-none focus:ring-red-500' : ''
+        }`}
+        placeholder="Nombre de la institución"
+      />
+      {#if formErrors.name}
+        <p class="mt-2 text-sm text-red-600">{formErrors.name}</p>
+      {/if}
+    </div>
+    
+    <div>
+      <label for="cuit" class="block text-sm font-medium text-gray-700">CUIT *</label>
+      <input
+        type="text"
+        id="cuit"
+        bind:value={formData.cuit}
+        class={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
+          formErrors.cuit ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:outline-none focus:ring-red-500' : ''
+        }`}
+        placeholder="00-12345678-9"
+      />
+      {#if formErrors.cuit}
+        <p class="mt-2 text-sm text-red-600">{formErrors.cuit}</p>
+      {/if}
+    </div>
+    
+    <div>
+      <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+      <input
+        type="email"
+        id="email"
+        bind:value={formData.email}
+        class={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
+          formErrors.email ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:outline-none focus:ring-red-500' : ''
+        }`}
+        placeholder="email@institucion.com"
+      />
+      {#if formErrors.email}
+        <p class="mt-2 text-sm text-red-600">{formErrors.email}</p>
+      {/if}
+    </div>
+    
+    <div>
+      <label for="address" class="block text-sm font-medium text-gray-700">Dirección</label>
+      <textarea
+        id="address"
+        bind:value={formData.address}
+        rows="3"
+        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+        placeholder="Dirección de la institución"
+      />
+    </div>
+  </div>
+</Modal>
+
+<!-- Delete Confirmation Modal -->
+<Modal
+  isOpen={showDeleteModal}
+  title="Eliminar Institución"
+  onClose={() => showDeleteModal = false}
+  onSubmit={handleDelete}
+  submitVariant="danger"
+  submitLabel="Eliminar"
+  submitLoading={isSubmitting}
+>
+  <p class="text-gray-700">
+    ¿Estás seguro que deseas eliminar la institución <span class="font-semibold">{currentInstitution?.name}</span>?
+    Esta acción no se puede deshacer.
+  </p>
+  
+  {#if formErrors._form}
+    <div class="mt-4 bg-red-50 border-l-4 border-red-400 p-4">
+      <div class="flex">
+        <div class="flex-shrink-0">
+          <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <div class="ml-3">
+          <p class="text-sm text-red-700">{formErrors._form}</p>
         </div>
       </div>
     </div>
   {/if}
-</div>
+</Modal>

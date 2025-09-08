@@ -40,8 +40,8 @@ async function main() {
     update: {},
     create: {
       dni: '12345678',
-      firstName: 'Juan',
-      lastName: 'Pérez',
+      nombre: 'Juan',
+      apellido: 'Pérez',
       email: 'juan.perez@email.com',
       phone: '+54 11 1234-5678',
       address: 'Av. Corrientes 1234, CABA',
@@ -58,8 +58,8 @@ async function main() {
     update: {},
     create: {
       dni: '23456789',
-      firstName: 'María',
-      lastName: 'González',
+      nombre: 'María',
+      apellido: 'González',
       email: 'maria.gonzalez@email.com',
       phone: '+54 11 2345-6789',
       address: 'Belgrano 567, CABA',
@@ -77,8 +77,8 @@ async function main() {
     update: {},
     create: {
       dni: '34567890',
-      firstName: 'Carlos',
-      lastName: 'López',
+      nombre: 'Carlos',
+      apellido: 'López',
       email: 'carlos.lopez@email.com',
       phone: '+54 11 3456-7890',
       address: 'San Martín 890, CABA',
@@ -95,8 +95,8 @@ async function main() {
     update: {},
     create: {
       dni: '45678901',
-      firstName: 'Ana',
-      lastName: 'Martínez',
+      nombre: 'Ana',
+      apellido: 'Martínez',
       email: 'ana.martinez@email.com',
       phone: '+54 11 4567-8901',
       address: 'Av. Cabildo 1234, CABA',
@@ -114,8 +114,8 @@ async function main() {
     update: {},
     create: {
       dni: '56789012',
-      firstName: 'Roberto',
-      lastName: 'Silva',
+      nombre: 'Roberto',
+      apellido: 'Silva',
       email: 'roberto.silva@email.com',
       phone: '+54 11 5678-9012',
       address: 'Florida 456, CABA',
@@ -129,58 +129,63 @@ async function main() {
 
   console.log('✅ Members created');
 
-  // Create sample documents
+  // Create sample documents with unique SHA256 hashes
   const doc1 = await prisma.document.create({
     data: {
-      type: 'RECEIPT',
+      type: 'BANK_RECEIPT',
       originalName: 'Recibo de sueldo - Agosto 2025.pdf',
       storagePath: '/uploads/recibo_agosto_2025.pdf',
       mimeType: 'application/pdf',
       size: 2516582, // 2.4 MB
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', // Empty file hash
       memberId: member1.id
     }
   });
 
   const doc2 = await prisma.document.create({
     data: {
-      type: 'ID',
+      type: 'MEMBER_CARD',
       originalName: 'DNI - Escaneo frontal.jpg',
       storagePath: '/uploads/dni_frontal.jpg',
       mimeType: 'image/jpeg',
       size: 1153434, // 1.1 MB
+      sha256: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e', // 'Hello World' hash
       memberId: member2.id
     }
   });
 
   const doc3 = await prisma.document.create({
     data: {
-      type: 'CONTRACT',
+      type: 'CONCEPT_SUMMARY',
       originalName: 'Contrato laboral.pdf',
       storagePath: '/uploads/contrato_laboral.pdf',
       mimeType: 'application/pdf',
       size: 3355443, // 3.2 MB
+      sha256: '3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23d8e2a9', // Unique hash for doc3
       memberId: member3.id
     }
   });
 
   const doc4 = await prisma.document.create({
     data: {
-      type: 'RECEIPT',
+      type: 'BANK_RECEIPT',
       originalName: 'Recibo de sueldo - Julio 2025.pdf',
       storagePath: '/uploads/recibo_julio_2025.pdf',
       mimeType: 'application/pdf',
       size: 2202009, // 2.1 MB
+      sha256: '4b227777d4dd1fc61c6f884f48645d515a0b1b1d9b1b8e5f8e5a5b5e5a5b5e5', // Unique hash for doc4
       memberId: member4.id
     }
   });
 
   const doc5 = await prisma.document.create({
     data: {
-      type: 'ID',
+      type: 'MEMBER_CARD',
       originalName: 'DNI - Reverso.jpg',
       storagePath: '/uploads/dni_reverso.jpg',
       mimeType: 'image/jpeg',
       size: 1048576, // 1.0 MB
+      sha256: '5c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7af', // Unique hash for doc5
       memberId: member2.id
     }
   });
@@ -188,51 +193,77 @@ async function main() {
   console.log('✅ Documents created');
 
   // Create sample jobs for documents
-  await prisma.job.createMany({
-    data: [
-      {
-        type: 'OCR',
-        status: 'COMPLETED',
-        documentId: doc1.id,
-        startedAt: new Date('2025-08-27T10:00:00Z'),
-        completedAt: new Date('2025-08-27T10:05:00Z')
-      },
-      {
-        type: 'PARSING',
-        status: 'COMPLETED',
-        documentId: doc1.id,
-        startedAt: new Date('2025-08-27T10:05:00Z'),
-        completedAt: new Date('2025-08-27T10:07:00Z')
-      },
-      {
-        type: 'OCR',
-        status: 'COMPLETED',
-        documentId: doc2.id,
-        startedAt: new Date('2025-08-27T11:00:00Z'),
-        completedAt: new Date('2025-08-27T11:02:00Z')
-      },
-      {
-        type: 'OCR',
-        status: 'PROCESSING',
-        documentId: doc3.id,
-        startedAt: new Date('2025-08-27T12:00:00Z')
-      },
-      {
-        type: 'OCR',
-        status: 'COMPLETED',
-        documentId: doc4.id,
-        startedAt: new Date('2025-08-25T09:00:00Z'),
-        completedAt: new Date('2025-08-25T09:03:00Z')
-      },
-      {
-        type: 'OCR',
-        status: 'FAILED',
-        documentId: doc5.id,
-        startedAt: new Date('2025-08-27T14:00:00Z'),
-        completedAt: new Date('2025-08-27T14:01:00Z'),
-        error: 'Image quality too low for OCR processing'
-      }
-    ]
+  await prisma.job.create({
+    data: {
+      type: 'OCR',
+      status: 'DONE',
+      documentId: doc1.id,
+      startedAt: new Date('2025-08-27T10:00:00Z'),
+      finishedAt: new Date('2025-08-27T10:05:00Z'),
+      payload: { pages: 1, resolution: '300dpi' },
+      result: { success: true, pagesProcessed: 1 }
+    }
+  });
+
+  await prisma.job.create({
+    data: {
+      type: 'PARSING',
+      status: 'DONE',
+      documentId: doc1.id,
+      startedAt: new Date('2025-08-27T10:05:00Z'),
+      finishedAt: new Date('2025-08-27T10:07:00Z'),
+      payload: { documentType: 'BANK_RECEIPT' },
+      result: { fieldsExtracted: 5, success: true }
+    }
+  });
+
+  await prisma.job.create({
+    data: {
+      type: 'OCR',
+      status: 'DONE',
+      documentId: doc2.id,
+      startedAt: new Date('2025-08-27T11:00:00Z'),
+      finishedAt: new Date('2025-08-27T11:02:00Z'),
+      payload: { pages: 1, resolution: '300dpi' },
+      result: { success: true, pagesProcessed: 1 }
+    }
+  });
+
+  await prisma.job.create({
+    data: {
+      type: 'OCR',
+      status: 'PROCESSING',
+      documentId: doc3.id,
+      startedAt: new Date('2025-08-27T12:00:00Z'),
+      payload: { pages: 2, resolution: '300dpi' },
+      metrics: { progress: 50 }
+    }
+  });
+
+  await prisma.job.create({
+    data: {
+      type: 'OCR',
+      status: 'DONE',
+      documentId: doc4.id,
+      startedAt: new Date('2025-08-25T09:00:00Z'),
+      finishedAt: new Date('2025-08-25T09:03:00Z'),
+      payload: { pages: 1, resolution: '300dpi' },
+      result: { success: true, pagesProcessed: 1 }
+    }
+  });
+
+  await prisma.job.create({
+    data: {
+      type: 'OCR',
+      status: 'DONE',
+      documentId: doc5.id,
+      startedAt: new Date('2025-08-27T14:00:00Z'),
+      finishedAt: new Date('2025-08-27T14:01:00Z'),
+      payload: { pages: 1, resolution: '150dpi' },
+      result: { success: false, error: 'Image quality too low for OCR processing' },
+      lastError: 'Image quality too low for OCR processing',
+      metrics: { error: 'low_quality', resolution: '150dpi' }
+    }
   });
 
   console.log('✅ Jobs created');
