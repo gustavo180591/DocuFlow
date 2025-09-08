@@ -29,7 +29,7 @@
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^8.56.0",
-		"@sveltejs/adapter-auto": "2.1.1",
+		"@sveltejs/adapter-auto": "6.1.0",
 		"@sveltejs/kit": "1.30.4",
 		"@sveltejs/vite-plugin-svelte": "2.5.3",
 		"@tailwindcss/forms": "^0.5.10",
