@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: docuflow_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: docuflow
+    ports:
+      - "5446:5432"   # host:container  ✅
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: docuflow_app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/docuflow          # ✅
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@db:5432/docuflow_shadow # ✅
+      UPLOAD_DIR: /data/uploads
+      EXTRACTION_DIR: /data/extractions
+      MAX_UPLOAD_MB: 20
+    volumes:
+      - .:/usr/src/app
+      - data-uploads:/data/uploads
+      - data-extractions:/data/extractions
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: docuflow_worker
+    command: ["npm", "run", "worker:dev"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/docuflow
+      UPLOAD_DIR: /data/uploads
+      EXTRACTION_DIR: /data/extractions
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules  # Prevent host node_modules from overriding container's
+      - data-uploads:/data/uploads
+      - data-extractions:/data/extractions
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  data-uploads:
+  data-extractions:
