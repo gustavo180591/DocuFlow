@@ -14,8 +14,14 @@ if (process.env.NODE_ENV !== 'production') global.__prisma = prisma;
 
 // Zod schema for member creation validation
 const CreateMemberSchema = z.object({
+  numeroOrden: z.string().min(1, 'El número de orden es obligatorio'),
+  numeroMatricula: z.string().min(1, 'El número de matrícula es obligatorio'),
   firstName: z.string().min(1, 'El nombre es obligatorio'),
   lastName: z.string().min(1, 'El apellido es obligatorio'),
+  institucion: z.string().optional(),
+  documentoIdentidad: z.string().min(1, 'El documento de identidad es obligatorio'),
+  nacionalidad: z.string().default('Argentina'),
+  status: z.enum(['active', 'inactive', 'suspended']).default('active'),
   email: z
     .string()
     .email('Email inválido')
@@ -23,7 +29,12 @@ const CreateMemberSchema = z.object({
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined)),
   phone: z.string().optional(),
-  address: z.string().optional()
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().default('México'),
+  membershipStartDate: z.string().default(() => new Date().toISOString().split('T')[0])
 });
 
 type MemberInput = z.infer<typeof CreateMemberSchema>;
@@ -106,19 +117,41 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const member = await prisma.member.create({
       data: {
+        numeroOrden: parsed.data.numeroOrden,
+        numeroMatricula: parsed.data.numeroMatricula,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
+        institucion: parsed.data.institucion,
+        documentoIdentidad: parsed.data.documentoIdentidad,
+        nacionalidad: parsed.data.nacionalidad,
+        status: parsed.data.status,
         email: parsed.data.email,
-        phone: parsed.data.phone ?? null,
-        address: parsed.data.address ?? null
+        phone: parsed.data.phone,
+        address: parsed.data.address,
+        city: parsed.data.city,
+        state: parsed.data.state,
+        postalCode: parsed.data.postalCode,
+        country: parsed.data.country,
+        membershipStartDate: new Date(parsed.data.membershipStartDate)
       },
       select: {
         id: true,
+        numeroOrden: true,
+        numeroMatricula: true,
         firstName: true,
         lastName: true,
+        institucion: true,
+        documentoIdentidad: true,
+        nacionalidad: true,
+        status: true,
         email: true,
         phone: true,
         address: true,
+        city: true,
+        state: true,
+        postalCode: true,
+        country: true,
+        membershipStartDate: true,
         createdAt: true,
         updatedAt: true
       }

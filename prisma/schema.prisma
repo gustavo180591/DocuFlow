@@ -21,15 +21,30 @@ model User {
 }
 
 model Member {
-  id          String   @id @default(cuid())
-  firstName   String
-  lastName    String
-  email       String?  @unique
-  phone       String?
-  address     String?
-  documents   Document[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  numeroOrden         String    @unique
+  numeroMatricula     String    @unique
+  firstName           String
+  lastName            String
+  institucion         String?
+  documentoIdentidad  String    @unique
+  nacionalidad        String    @default("Argentina")
+  status              String    @default("active")
+  email               String?   @unique
+  phone               String?
+  address             String?
+  city                String?
+  state               String?
+  postalCode          String?
+  country             String?   @default("Argentina")
+  membershipStartDate DateTime
+  documents           Document[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([numeroOrden, numeroMatricula])
+  @@index([documentoIdentidad])
+  @@index([status])
 }
 
 model Document {
