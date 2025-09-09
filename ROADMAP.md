@@ -8,8 +8,8 @@ Este documento describe el plan de desarrollo y las características planificada
 - [x] Configuración inicial del proyecto con SvelteKit
 - [x] Estructura de base de datos para socios
 - [x] Formulario de creación/edición de socios
-- [ ] Listado de socios con paginación
-- [ ] Búsqueda y filtrado de socios
+- [x] Listado de socios con paginación
+- [x] Búsqueda y filtrado de socios
 - [ ] Perfil detallado de socio
 
 ### Fase 2: Gestión Documental

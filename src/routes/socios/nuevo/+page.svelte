@@ -4,38 +4,42 @@
   
   // Form state interface
   interface MemberFormData {
+    numeroOrden: string;
+    numeroMatricula: string;
     firstName: string;
     lastName: string;
+    institucion: string;
+    documentoIdentidad: string;
     email: string;
     phone: string;
     address: string;
     city: string;
     state: string;
+    nacionalidad: string;
     postalCode: string;
     country: string;
-    membershipType: string;
     membershipStartDate: string;
-    membershipEndDate: string;
     status: string;
-    notes: string;
   }
 
   // Form state with default values
   let formData: MemberFormData = {
+    numeroOrden: '',
+    numeroMatricula: '',
     firstName: '',
     lastName: '',
+    institucion: '',
+    documentoIdentidad: '',
     email: '',
     phone: '',
     address: '',
     city: '',
     state: '',
+    nacionalidad: 'Argentina',
     postalCode: '',
     country: 'México',
-    membershipType: 'standard',
     membershipStartDate: new Date().toISOString().split('T')[0],
-    membershipEndDate: '',
-    status: 'active',
-    notes: ''
+    status: 'active'
   };
 
   // Form state
@@ -43,18 +47,6 @@
   let formError = '';
   let formSuccess = false;
   const errors: Record<string, string> = {};
-
-  // Calculate default end date (1 year from now)
-  function calculateDefaultEndDate(): string {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
-    return date.toISOString().split('T')[0];
-  }
-
-  // Set default end date on mount
-  onMount(() => {
-    formData.membershipEndDate = calculateDefaultEndDate();
-  });
 
   // Handle form submission
   async function handleSubmit(event: Event) {
@@ -69,9 +61,7 @@
     if (!formData.lastName.trim()) {
       errors.lastName = 'El apellido es requerido';
     }
-    if (!formData.email.trim()) {
-      errors.email = 'El correo electrónico es requerido';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = 'Por favor ingrese un correo electrónico válido';
     }
 
@@ -195,6 +185,34 @@
             <div class="bg-white px-4 py-5 sm:p-6">
               <div class="grid grid-cols-6 gap-6">
                 <div class="col-span-6 sm:col-span-3">
+                  <label for="numeroOrden" class="block text-sm font-medium text-gray-700">
+                    Número de orden
+                  </label>
+                  <input
+                    type="text"
+                    name="numeroOrden"
+                    id="numeroOrden"
+                    bind:value={formData.numeroOrden}
+                    on:input={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  />
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="numeroMatricula" class="block text-sm font-medium text-gray-700">
+                    Número de matrícula
+                  </label>
+                  <input
+                    type="text"
+                    name="numeroMatricula"
+                    id="numeroMatricula"
+                    bind:value={formData.numeroMatricula}
+                    on:input={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  />
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
                   <label for="firstName" class="block text-sm font-medium text-gray-700">
                     Nombre *
                   </label>
@@ -205,7 +223,7 @@
                     bind:value={formData.firstName}
                     on:input={handleInput}
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                   {#if errors.firstName}
                     <p class="mt-1 text-sm text-red-600">{errors.firstName}</p>
@@ -223,16 +241,100 @@
                     bind:value={formData.lastName}
                     on:input={handleInput}
                     required
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                   {#if errors.lastName}
                     <p class="mt-1 text-sm text-red-600">{errors.lastName}</p>
                   {/if}
                 </div>
 
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="institucion" class="block text-sm font-medium text-gray-700">
+                    Institución
+                  </label>
+                  <input
+                    type="text"
+                    name="institucion"
+                    id="institucion"
+                    bind:value={formData.institucion}
+                    on:input={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  />
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="documentoIdentidad" class="block text-sm font-medium text-gray-700">
+                    Documento de identidad
+                  </label>
+                  <input
+                    type="text"
+                    name="documentoIdentidad"
+                    id="documentoIdentidad"
+                    bind:value={formData.documentoIdentidad}
+                    on:input={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  />
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="nacionalidad" class="block text-sm font-medium text-gray-700">
+                    Nacionalidad
+                  </label>
+                  <select
+                    id="nacionalidad"
+                    name="nacionalidad"
+                    bind:value={formData.nacionalidad}
+                    on:change={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  >
+                    <option value="Argentina">Argentina</option>
+                    <option value="Uruguay">Uruguay</option>
+                    <option value="Brasil">Brasil</option>
+                    <option value="Chile">Chile</option>
+                    <option value="Paraguay">Paraguay</option>
+                    <option value="Bolivia">Bolivia</option>
+                    <option value="Perú">Perú</option>
+                    <option value="Ecuador">Ecuador</option>
+                    <option value="Colombia">Colombia</option>
+                    <option value="Venezuela">Venezuela</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="status" class="block text-sm font-medium text-gray-700">
+                    Estado
+                  </label>
+                  <select
+                    id="status"
+                    name="status"
+                    bind:value={formData.status}
+                    on:change={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  >
+                    <option value="active">Activo</option>
+                    <option value="inactive">Inactivo</option>
+                    <option value="suspended">Suspendido</option>
+                  </select>
+                </div>
+
+                <div class="col-span-6 sm:col-span-3">
+                  <label for="membershipStartDate" class="block text-sm font-medium text-gray-700">
+                    Fecha de Ingreso
+                  </label>
+                  <input
+                    type="date"
+                    name="membershipStartDate"
+                    id="membershipStartDate"
+                    bind:value={formData.membershipStartDate}
+                    on:input={handleInput}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                  />
+                </div>
+
                 <div class="col-span-6 sm:col-span-4">
                   <label for="email" class="block text-sm font-medium text-gray-700">
-                    Correo electrónico *
+                    Correo electrónico
                   </label>
                   <input
                     type="email"
@@ -240,12 +342,8 @@
                     id="email"
                     bind:value={formData.email}
                     on:input={handleInput}
-                    required
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
-                  {#if errors.email}
-                    <p class="mt-1 text-sm text-red-600">{errors.email}</p>
-                  {/if}
                 </div>
 
                 <div class="col-span-6 sm:col-span-3">
@@ -258,7 +356,7 @@
                     id="phone"
                     bind:value={formData.phone}
                     on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                 </div>
 
@@ -272,7 +370,7 @@
                     id="address"
                     bind:value={formData.address}
                     on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                 </div>
 
@@ -286,13 +384,13 @@
                     id="city"
                     bind:value={formData.city}
                     on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                 </div>
 
                 <div class="col-span-6 sm:col-span-2">
                   <label for="state" class="block text-sm font-medium text-gray-700">
-                    Estado
+                    Localidad
                   </label>
                   <input
                     type="text"
@@ -300,7 +398,7 @@
                     id="state"
                     bind:value={formData.state}
                     on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                 </div>
 
@@ -314,87 +412,13 @@
                     id="postalCode"
                     bind:value={formData.postalCode}
                     on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                   />
                 </div>
 
-                <div class="col-span-6 sm:col-span-3">
-                  <label for="membershipType" class="block text-sm font-medium text-gray-700">
-                    Tipo de Membresía
-                  </label>
-                  <select
-                    id="membershipType"
-                    name="membershipType"
-                    bind:value={formData.membershipType}
-                    on:change={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  >
-                    <option value="standard">Estándar</option>
-                    <option value="premium">Premium</option>
-                    <option value="vip">VIP</option>
-                  </select>
-                </div>
 
-                <div class="col-span-6 sm:col-span-3">
-                  <label for="status" class="block text-sm font-medium text-gray-700">
-                    Estado
-                  </label>
-                  <select
-                    id="status"
-                    name="status"
-                    bind:value={formData.status}
-                    on:change={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  >
-                    <option value="active">Activo</option>
-                    <option value="inactive">Inactivo</option>
-                    <option value="suspended">Suspendido</option>
-                  </select>
-                </div>
 
-                <div class="col-span-6 sm:col-span-3">
-                  <label for="membershipStartDate" class="block text-sm font-medium text-gray-700">
-                    Fecha de Inicio
-                  </label>
-                  <input
-                    type="date"
-                    name="membershipStartDate"
-                    id="membershipStartDate"
-                    bind:value={formData.membershipStartDate}
-                    on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
 
-                <div class="col-span-6 sm:col-span-3">
-                  <label for="membershipEndDate" class="block text-sm font-medium text-gray-700">
-                    Fecha de Fin
-                  </label>
-                  <input
-                    type="date"
-                    name="membershipEndDate"
-                    id="membershipEndDate"
-                    bind:value={formData.membershipEndDate}
-                    on:input={handleInput}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-
-                <div class="col-span-6">
-                  <label for="notes" class="block text-sm font-medium text-gray-700">
-                    Notas
-                  </label>
-                  <div class="mt-1">
-                    <textarea
-                      id="notes"
-                      name="notes"
-                      rows="3"
-                      bind:value={formData.notes}
-                      on:input={handleInput}
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    ></textarea>
-                  </div>
-                </div>
               </div>
             </div>
             
