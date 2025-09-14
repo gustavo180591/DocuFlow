@@ -1,0 +1,15 @@
+{
+  "type": "COMPROBANTE_BANCO",
+  "date": "15/10/2023",
+  "amount": 1267.4,
+  "reference": "AP-2023-10-123",
+  "from": "****1234",
+  "to": "ASOCIACIÓN VECINAL EL BOSQUE",
+  "details": {
+    "Tipo": "Transferencia",
+    "Concepto": "Pago de cuota social Octubre 2023",
+    "Comisión": "$15.00",
+    "IVA": "$2.40"
+  },
+  "rawText": "BANCO NACIONAL\nCOMPROBANTE DE TRANSACCIÓN\n\nNúmero de transacción: 123456789\nFecha: 15/10/2023\nHora: 14:30:45\n\nDETALLES DE LA OPERACIÓN\nTipo: Transferencia\nCuenta origen: ****1234\nCuenta destino: ****5678\nBeneficiario: ASOCIACIÓN VECINAL EL BOSQUE\nConcepto: Pago de cuota social Octubre 2023\n\nIMPORTE: $1,250.00\nComisión: $15.00\nIVA: $2.40\nTOTAL: $1,267.40\n\nReferencia: AP-2023-10-123\n\n--- FIN DEL COMPROBANTE ---\n"
+}

@@ -1,0 +1,43 @@
+=== DOCUMENT EXTRACTION RESULTS ===
+File: test/files/comprobante_banco_1.txt
+Type: COMPROBANTE_BANCO
+Processing time: 2025-09-13T23:57:58.600Z
+
+=== EXTRACTED DATA ===
+type           : COMPROBANTE_BANCO
+date           : 14/10/2023
+amount         : $ 1.267,40
+reference      : AP-2023-10-123
+from           : ****1234
+to             : ASOCIACIÓN VECINAL EL BOSQUE
+details        : 
+  Tipo                : Transferencia
+  Concepto            : Pago de cuota social Octubre 2023
+  Comisión            : $15.00
+  IVA                 : $2.40
+
+=== FULL TEXT ===
+BANCO NACIONAL
+COMPROBANTE DE TRANSACCIÓN
+
+Número de transacción: 123456789
+Fecha: 15/10/2023
+Hora: 14:30:45
+
+DETALLES DE LA OPERACIÓN
+Tipo: Transferencia
+Cuenta origen: ****1234
+Cuenta destino: ****5678
+Beneficiario: ASOCIACIÓN VECINAL EL BOSQUE
+Concepto: Pago de cuota social Octubre 2023
+
+IMPORTE: $1,250.00
+Comisión: $15.00
+IVA: $2.40
+TOTAL: $1,267.40
+
+Referencia: AP-2023-10-123
+
+--- FIN DEL COMPROBANTE ---
+
+=== END OF DOCUMENT ===

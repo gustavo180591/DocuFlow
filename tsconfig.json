@@ -1,46 +1,22 @@
 {
   "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "target": "es2020",
-    "module": "es2020",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
     "strict": true,
-    "lib": ["es2020", "dom"],
-    "types": ["@sveltejs/kit", "svelte"],
+    "skipLibCheck": true,
     "verbatimModuleSyntax": false,
-    "noImplicitAny": false,
-    "noImplicitThis": true,
-    "strictNullChecks": true,
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
       "$lib": ["src/lib"],
       "$lib/*": ["src/lib/*"],
-      "$app/*": ["node_modules/@sveltejs/kit/src/runtime/app/*"],
-      "@sveltejs/kit/*": ["node_modules/@sveltejs/kit/src/runtime/*"]
+      "pdfjs-dist": ["node_modules/pdfjs-dist/types/src/display/api"]
     },
-    "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules/@sveltejs/kit/types",
-      "./src/types"
-    ]
+    "types": ["svelte", "node"]
   },
-  "include": [
-    "src/global.d.ts",
-    "src/**/*.d.ts",
-    "src/**/*.js",
-    "src/**/*.ts",
-    "src/**/*.svelte"
-  ],
-  "exclude": ["node_modules"],
-  "svelte": {
-    "compilerOptions": {
-      "customElement": false
-    }
-  }
+  "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.svelte"],
+  "exclude": ["node_modules"]
 }

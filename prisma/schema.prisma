@@ -38,7 +38,7 @@ model Member {
   postalCode          String?
   country             String?   @default("Argentina")
   membershipStartDate DateTime
-  documents           Document[]
+  documents           MemberDocument[]
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -47,7 +47,8 @@ model Member {
   @@index([status])
 }
 
-model Document {
+// Member-specific documents
+model MemberDocument {
   id          String   @id @default(cuid())
   type        String
   title       String
@@ -65,8 +66,94 @@ model Document {
   @@index([memberId])
 }
 
+// Document Processing Models
+model ProcessedDocument {
+  id          String       @id @default(cuid())
+  originalName String
+  storagePath String
+  mimeType    String
+  size        Int
+  type        String       @default("UNKNOWN")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  extractions Extraction[]
+  batch       ContributionBatch?
+  transfer    BankTransfer?
+}
+
+model Extraction {
+  id         String          @id @default(cuid())
+  pageIndex  Int
+  textRaw    String
+  document   ProcessedDocument @relation(fields: [documentId], references: [id])
+  documentId String
+
+  @@unique([documentId, pageIndex])
+}
+
+model ContributionBatch {
+  id                   String             @id @default(cuid())
+  institutionName      String
+  institutionCuit      String
+  period               String
+  concept              String
+  personasCount        Int
+  totalAportesPeriodo  Float
+  reconciliationStatus String             @default("PENDIENTE")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  document             ProcessedDocument  @relation(fields: [documentId], references: [id])
+  documentId           String             @unique
+  items                ContributionItem[]
+  transfer             BankTransfer?
+}
+
+model ContributionItem {
+  id           String           @id @default(cuid())
+  batch        ContributionBatch @relation(fields: [batchId], references: [id])
+  batchId      String
+  fullNameRaw  String
+  legajosCount Int?             @default(1)
+  remunerativo Float?
+  aporteMonto  Float
+  
+  @@index([batchId])
+}
+
+model BankTransfer {
+  id              String           @id @default(cuid())
+  beneficiaryName String?
+  beneficiaryCuit String?
+  cbu             String?
+  fecha           DateTime?
+  nroOperacion    String?
+  nroReferencia   String?
+  importe         Float
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  document        ProcessedDocument @relation(fields: [documentId], references: [id])
+  documentId      String           @unique
+  batch           ContributionBatch? @relation(fields: [batchId], references: [id])
+  batchId         String?          @unique
+  
+  @@index([documentId])
+  @@index([batchId])
+}
+
 enum Role {
   ADMIN
   EDITOR
   VIEWER
+}
+
+enum DocumentType {
+  UNKNOWN
+  LISTADO_APORTE
+  COMPROBANTE_BANCO
+}
+
+enum ReconciliationStatus {
+  PENDIENTE
+  CONCILIADO
+  RECHAZADO
 }

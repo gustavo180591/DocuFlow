@@ -1,0 +1,13 @@
+DOCUMENTO DE PRUEBA
+
+Este es un documento de prueba para verificar la extracción de texto.
+
+FECHA: 2023-10-15
+TIPO: LISTADO_APORTE
+
+DETALLES:
+- Item 1: Aporte regular
+- Item 2: Aporte extraordinario
+- Total: $1,000.00
+
+--- FIN DEL DOCUMENTO ---
