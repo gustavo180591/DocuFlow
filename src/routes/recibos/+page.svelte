@@ -57,29 +57,103 @@
   
   
   // Format date for display
-  function formatDate(dateString: string, timeOnly = false): string {
-    try {
-      if (!dateString) return '';
-      const date = new Date(dateString);
-      
-      if (timeOnly) {
-        return date.toLocaleTimeString('es-AR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      }
-      
-      return date.toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-    } catch (e) {
-      console.error('Error formatting date:', e);
-      return dateString || '';
+  function formatDate(dateString: string, includeTime = false): string {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Check if the date is today
+    if (date.toDateString() === today.toDateString()) {
+      return includeTime 
+        ? `Hoy, ${date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+        : 'Hoy';
     }
+    
+    // Check if the date is yesterday
+    if (date.toDateString() === yesterday.toDateString()) {
+      return includeTime 
+        ? `Ayer, ${date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+        : 'Ayer';
+    }
+    
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    };
+    
+    if (includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+    }
+    
+    return date.toLocaleDateString('es-AR', options);
   }
   
+  // Generate page numbers with ellipsis for pagination
+  function getPageNumbers(currentPage: number, totalPages: number): (number | '...')[] {
+    const pages: (number | '...')[] = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      // Show all pages if there are 5 or fewer
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    // Always show first page
+    pages.push(1);
+    
+    // Calculate start and end page numbers
+    let startPage = Math.max(2, currentPage - 1);
+    let endPage = Math.min(totalPages - 1, currentPage + 1);
+    
+    // Adjust if we're at the start or end
+    if (currentPage <= 3) {
+      endPage = 4;
+    } else if (currentPage >= totalPages - 2) {
+      startPage = totalPages - 3;
+    }
+    
+    // Add ellipsis after first page if needed
+    if (startPage > 2) {
+      pages.push('...');
+    }
+    
+    // Add middle pages
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    
+    // Add ellipsis before last page if needed
+    if (endPage < totalPages - 1) {
+      pages.push('...');
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  }
+
+  // Handle page change from dropdown
+  function handlePageChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const page = target.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', page);
+    if (searchQuery) {
+      url.searchParams.set('search', searchQuery);
+    }
+    goto(url.toString());
+  }
+
   // Format currency
   function formatCurrency(amount: number): string {
     try {
@@ -217,7 +291,7 @@
                   Tipo
                 </th>
                 <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Socio
+                  Institución
                 </th>
                 <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                   Referencia
@@ -237,11 +311,15 @@
               {#if data?.receipts?.length > 0}
                 {#each data.receipts as receipt (receipt.id)}
                   <tr class="hover:bg-gray-50">
-                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-gray-500 sm:pl-6">
                       <div class="flex flex-col">
-                        <span>{formatDate(receipt.date)}</span>
+                        <span class="font-medium text-gray-900">
+                          {formatDate(receipt.date)}
+                        </span>
                         <span class="text-xs text-gray-500">
-                          {new Date(receipt.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                          {formatDate(receipt.date, true).includes(',') 
+                            ? formatDate(receipt.date, true).split(', ')[1]
+                            : ''}
                         </span>
                       </div>
                     </td>
@@ -284,7 +362,7 @@
                     <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                       <div class="flex justify-end space-x-2">
                         <a
-                        href="/recibos/{receipt.id}"
+                        href={`/recibos/${receipt.id}`}
                         class="text-indigo-600 hover:text-indigo-900"
                       >
                         Ver<span class="sr-only">, {receipt.reference || 'recibo'}</span>
@@ -333,33 +411,55 @@
   
   <!-- Pagination -->
   {#if data?.meta?.totalPages > 1}
-    <div class="mt-8 flex items-center justify-between">
-      <div class="flex flex-1 justify-between sm:hidden">
-        {#if data.meta.page > 1}
-          <a
-            href="?page={data.meta.page - 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
-            class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Anterior
-          </a>
-        {:else}
-          <span class="relative inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">
-            Anterior
-          </span>
-        {/if}
-        {#if data.meta.page < data.meta.totalPages}
-          <a
-            href="?page={data.meta.page + 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
-            class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Siguiente
-          </a>
-        {:else}
-          <span class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">
-            Siguiente
-          </span>
-        {/if}
+    <div class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <!-- Mobile pagination -->
+      <div class="flex-1 sm:hidden w-full">
+        <div class="flex justify-between items-center bg-white rounded-lg shadow-sm p-1">
+          {#if data.meta.page > 1}
+            <a
+              href="?page={data.meta.page - 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+              class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <svg class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+              Anterior
+            </a>
+          {:else}
+            <span class="relative inline-flex items-center px-4 py-2 border border-gray-200 text-sm font-medium rounded-md text-gray-300 bg-gray-50 cursor-not-allowed">
+              <svg class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+              Anterior
+            </span>
+          {/if}
+          
+          <div class="flex items-center text-sm text-gray-700">
+            <span class="font-medium">Pág. {data.meta.page} de {data.meta.totalPages}</span>
+          </div>
+          
+          {#if data.meta.page < data.meta.totalPages}
+            <a
+              href="?page={data.meta.page + 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+              class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              Siguiente
+              <svg class="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          {:else}
+            <span class="relative inline-flex items-center px-4 py-2 border border-gray-200 text-sm font-medium rounded-md text-gray-300 bg-gray-50 cursor-not-allowed">
+              Siguiente
+              <svg class="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
+          {/if}
+        </div>
       </div>
+
+      <!-- Desktop pagination -->
       <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div>
           <p class="text-sm text-gray-700">
@@ -368,64 +468,122 @@
             </span> de <span class="font-medium">{data.meta.total}</span> resultados
           </p>
         </div>
-        <div>
-          <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-            <!-- Previous page -->
+        <div class="flex items-center gap-2">
+          <div class="flex items-center text-sm text-gray-700 mr-4">
+            <span class="mr-2">Ir a la página:</span>
+            <div class="relative">
+              <select 
+                on:change={handlePageChange}
+                class="block w-20 rounded-md border-0 py-1.5 pl-2 pr-8 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
+              >
+                {#each Array.from({ length: data.meta.totalPages }, (_, i) => i + 1) as pageNum}
+                  <option value={pageNum} selected={pageNum === data.meta.page}>
+                    {pageNum}
+                  </option>
+                {/each}
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+            <span class="ml-2">de {data.meta.totalPages}</span>
+          </div>
+
+          <nav class="isolate inline-flex -space-x-px rounded-md bg-white shadow-sm" aria-label="Pagination">
             {#if data.meta.page > 1}
               <a
+                href="?page=1{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+                class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-700 ring-1 ring-inset ring-gray-300 bg-white hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                title="Primera página"
+              >
+                <span class="sr-only">Primera</span>
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </a>
+              <a
                 href="?page={data.meta.page - 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
-                class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                class="relative inline-flex items-center px-2 py-2 text-gray-700 ring-1 ring-inset ring-gray-300 bg-white hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                title="Página anterior"
               >
                 <span class="sr-only">Anterior</span>
-                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
               </a>
             {:else}
-              <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
+              <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 bg-gray-50 cursor-not-allowed">
+                <span class="sr-only">Primera</span>
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </span>
+              <span class="relative inline-flex items-center px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 bg-gray-50 cursor-not-allowed">
                 <span class="sr-only">Anterior</span>
-                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
               </span>
             {/if}
-            
-            <!-- Page numbers -->
-            {#each Array.from({ length: Math.min(5, data.meta.totalPages) }, (_, i) => i + 1) as pageNumber}
-              {#if (data.meta.page <= 3 && pageNumber <= 5) ||
-                  (data.meta.page >= data.meta.totalPages - 2 && 
-                   pageNumber >= data.meta.totalPages - 4) ||
-                  (pageNumber >= data.meta.page - 2 && pageNumber <= data.meta.page + 2)}
-                {#if pageNumber >= 1 && pageNumber <= data.meta.totalPages}
+
+            <!-- Dynamic page numbers -->
+            {#each getPageNumbers(data.meta.page, data.meta.totalPages) as pageNum}
+              {#if pageNum === '...'}
+                <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">
+                  {pageNum}
+                </span>
+              {:else if pageNum === data.meta.page}
                 <a
-                  href="?page={pageNumber}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
-                  class="relative inline-flex items-center px-4 py-2 text-sm font-semibold {data.meta.page === pageNumber 
-                    ? 'z-10 bg-indigo-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600' 
-                    : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0'}"
-                  aria-current={data.meta.page === pageNumber ? 'page' : undefined}
+                  href="?page={pageNum}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+                  aria-current="page"
+                  class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                 >
-                  {pageNumber}
+                  {pageNum}
                 </a>
-                {/if}
+              {:else}
+                <a
+                  href="?page={pageNum}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+                  class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                >
+                  {pageNum}
+                </a>
               {/if}
             {/each}
-            
-            <!-- Next page -->
+
             {#if data.meta.page < data.meta.totalPages}
               <a
                 href="?page={data.meta.page + 1}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
-                class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                class="relative inline-flex items-center px-2 py-2 text-gray-700 ring-1 ring-inset ring-gray-300 bg-white hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                title="Siguiente página"
               >
                 <span class="sr-only">Siguiente</span>
-                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
+              <a
+                href="?page={data.meta.totalPages}{searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}"
+                class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-700 ring-1 ring-inset ring-gray-300 bg-white hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                title="Última página"
+              >
+                <span class="sr-only">Última</span>
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </a>
             {:else}
-              <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
+              <span class="relative inline-flex items-center px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 bg-gray-50 cursor-not-allowed">
                 <span class="sr-only">Siguiente</span>
-                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+              <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 bg-gray-50 cursor-not-allowed">
+                <span class="sr-only">Última</span>
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </span>
             {/if}

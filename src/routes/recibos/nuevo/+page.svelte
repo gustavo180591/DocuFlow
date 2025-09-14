@@ -17,6 +17,7 @@
     progress: number;
     error: string | null;
     documentId?: string;
+    redirectPath?: string;
   }
 
   // Form state
@@ -94,7 +95,8 @@
           
           const result = await response.json();
           uploads[i].status = 'completed';
-          uploads[i].documentId = result.documentId;
+          uploads[i].documentId = result.fileName;
+          uploads[i].redirectPath = result.redirectPath; // Store the redirect path
           uploads = [...uploads]; // Trigger reactivity
           
         } catch (err: unknown) {
@@ -110,11 +112,16 @@
       const allSuccessful = uploads.every(upload => upload.status === 'completed');
       
       if (allSuccessful) {
-        success = 'Todos los recibos se subieron correctamente';
-        // Redirect to receipts list after a delay
+        success = 'Todos los archivos se procesaron correctamente';
+        
+        // If we have a redirect path from the last successful upload, use it
+        const lastUpload = uploads.find(u => u.status === 'completed' && u.redirectPath);
+        const redirectPath = lastUpload?.redirectPath || '/recibos';
+        
+        // Redirect after a short delay
         setTimeout(() => {
-          goto('/recibos');
-        }, 2000);
+          goto(redirectPath);
+        }, 1500);
       } else {
         error = 'Algunos archivos no se pudieron subir. Por favor, revise los detalles.';
       }
